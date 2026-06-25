@@ -1,4 +1,5 @@
-import { Steps, Progress, Alert, Space, Tag, Typography } from 'antd';
+import { Progress, Alert, Space, Tag, Typography } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined, MinusCircleOutlined } from '@ant-design/icons';
 import type { ScanProgressView } from './scanProgressTypes';
 import { SCAN_PROGRESS_STEP_STATUS_META } from './scanProgressTypes';
 
@@ -8,76 +9,89 @@ interface ScanProgressPanelProps {
   progress: ScanProgressView;
 }
 
-function toStepsStatus(status: ScanProgressView['steps'][number]['status']): 'wait' | 'process' | 'finish' | 'error' {
+function StepIcon({ status }: { status: ScanProgressView['steps'][number]['status'] }) {
   switch (status) {
-    case 'running':
-      return 'process';
     case 'completed':
-      return 'finish';
+      return <CheckCircleOutlined style={{ color: '#16a34a' }} />;
     case 'failed':
-      return 'error';
+      return <CloseCircleOutlined style={{ color: '#dc2626' }} />;
+    case 'running':
+      return <LoadingOutlined style={{ color: '#006eff' }} />;
     case 'skipped':
-      return 'wait';
+      return <MinusCircleOutlined style={{ color: '#94a3b8' }} />;
     default:
-      return 'wait';
+      return <span className="module-status-dot module-status-dot--pending" />;
   }
 }
 
 export function ScanProgressPanel({ progress }: ScanProgressPanelProps) {
   const currentStep = progress.steps.find((step) => step.key === progress.currentStepKey);
+  const activeSteps = progress.steps.filter((step) => step.status !== 'skipped');
 
   return (
-    <Space direction="vertical" size={16} className="full-width">
+    <Space direction="vertical" size={16} className="full-width scan-progress-panel">
       <div>
         <div className="scan-progress-header">
           <Text strong>扫描进度</Text>
-          <Text type="secondary">{progress.percent}%</Text>
+          <Text type="secondary" style={{ fontFamily: 'var(--fs-mono)' }}>
+            {progress.percent}%
+          </Text>
         </div>
         <Progress
           percent={progress.percent}
           status={progress.status === 'failed' ? 'exception' : progress.status === 'completed' ? 'success' : 'active'}
           showInfo={false}
+          strokeColor={{ from: '#38bdf8', to: '#006eff' }}
         />
       </div>
 
       {progress.status === 'running' && currentStep && (
-        <Alert
-          type="info"
-          showIcon
-          message="当前正在监测"
-          description={
-            <div>
+        <div className="scan-progress-current">
+          <span className="scan-progress-pulse" aria-hidden />
+          <div>
+            <Text strong style={{ fontSize: 13 }}>
+              {currentStep.label}
+            </Text>
+            {currentStep.detail && (
               <div>
-                <Text strong>{currentStep.label}</Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {currentStep.detail}
+                </Text>
               </div>
-              {currentStep.detail && <div style={{ marginTop: 4 }}>{currentStep.detail}</div>}
-            </div>
-          }
-        />
+            )}
+          </div>
+        </div>
       )}
 
       {progress.status === 'failed' && progress.error && (
         <Alert type="error" showIcon message="扫描失败" description={progress.error} />
       )}
 
-      <Steps
-        direction="vertical"
-        size="small"
-        current={progress.steps.findIndex((step) => step.status === 'running')}
-        items={progress.steps.map((step) => {
-          const meta = SCAN_PROGRESS_STEP_STATUS_META[step.status];
-          return {
-            title: step.label,
-            description: (
-              <Space direction="vertical" size={4}>
-                <Tag color={meta.color}>{meta.label}</Tag>
-                {step.detail && <Text type="secondary">{step.detail}</Text>}
-              </Space>
-            ),
-            status: toStepsStatus(step.status),
-          };
-        })}
-      />
+      <div className="scan-step-compact">
+        <Space direction="vertical" size={6} className="full-width">
+          {activeSteps.map((step) => {
+            const meta = SCAN_PROGRESS_STEP_STATUS_META[step.status];
+            return (
+              <div
+                key={step.key}
+                className="readiness-check-row"
+                style={{
+                  opacity: step.status === 'pending' ? 0.55 : 1,
+                  transition: 'opacity 0.2s ease',
+                }}
+              >
+                <span className="readiness-check-icon">
+                  <StepIcon status={step.status} />
+                </span>
+                <Text style={{ flex: 1, fontSize: 13 }}>{step.label}</Text>
+                <Tag color={meta.color} style={{ margin: 0 }}>
+                  {meta.label}
+                </Tag>
+              </div>
+            );
+          })}
+        </Space>
+      </div>
     </Space>
   );
 }

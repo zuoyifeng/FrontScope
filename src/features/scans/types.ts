@@ -12,6 +12,7 @@ export interface EvidenceModuleView {
   key: EvidenceModuleKey;
   title: string;
   description: string;
+  caps: string[];
   status: EvidenceModuleStatus;
   statusDetail?: string;
 }

@@ -37,8 +37,8 @@ describe('ScanProgressPanel', () => {
     render(<ScanProgressPanel progress={runningProgress} />);
 
     expect(screen.getByText('扫描进度')).toBeInTheDocument();
-    expect(screen.getByText('当前正在监测')).toBeInTheDocument();
     expect(screen.getAllByText('页面会话采集').length).toBeGreaterThan(0);
     expect(screen.getByText('Lighthouse 性能审计')).toBeInTheDocument();
+    expect(screen.getByText('运行时错误、Network、Performance Trace、截图')).toBeInTheDocument();
   });
 });

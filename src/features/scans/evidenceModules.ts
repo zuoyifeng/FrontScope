@@ -9,31 +9,37 @@ import type { ScanProgressView } from './scanProgressTypes';
 
 export const EVIDENCE_MODULE_DEFINITIONS: Record<
   EvidenceModuleKey,
-  Pick<EvidenceModuleView, 'title' | 'description'>
+  Pick<EvidenceModuleView, 'title' | 'description'> & { caps: string[] }
 > = {
   runtime: {
     title: '运行时诊断',
     description: '采集控制台错误、页面异常、失败请求和页面截图。',
+    caps: ['Console', 'Screenshot', 'Errors'],
   },
   performance: {
     title: '性能审计',
     description: '运行 Lighthouse 和 Performance Trace，提取评分、核心指标、长任务和布局偏移。',
+    caps: ['Lighthouse', 'Trace', 'Web Vitals'],
   },
   network: {
     title: 'Network 资源诊断',
     description: '采集资源体积、缓存命中率、慢请求、大资源和失败请求。',
+    caps: ['CDP', 'Cache', 'Slow Req'],
   },
   project: {
     title: '项目质量',
     description: '读取包元信息，并执行类型检查、Lint、依赖审计、无用代码、循环依赖与本地代码审查。',
+    caps: ['tsc', 'ESLint', 'Knip', 'Madge'],
   },
   memory: {
     title: '内存诊断',
     description: '采集堆快照；可配置重载前后对比以输出疑似泄漏信号。',
+    caps: ['Heap', 'Reload Diff'],
   },
   ai: {
     title: 'AI 诊断',
     description: '基于已采集证据生成优先级问题清单与修复建议。',
+    caps: ['Evidence', 'Priority', 'Fix'],
   },
 };
 
@@ -281,6 +287,7 @@ export function buildEvidenceModules(input: BuildEvidenceModulesInput): Evidence
         key,
         title: definition.title,
         description: definition.description,
+        caps: definition.caps,
         ...resolved,
       };
     });

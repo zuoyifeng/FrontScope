@@ -223,7 +223,7 @@ describe('App', () => {
     render(<App />);
 
     expect(screen.getByText('FrontScope')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '前端证据体检工作台' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '前端AI Health Check工作台' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '开始扫描' })).toBeInTheDocument();
     expect(screen.getByText('证据采集模块')).toBeInTheDocument();
     expect(screen.getByText('运行时诊断')).toBeInTheDocument();

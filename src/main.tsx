@@ -9,9 +9,19 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <ConfigProvider
       theme={{
         token: {
-          colorPrimary: '#0d9488',
+          colorPrimary: '#006eff',
+          colorInfo: '#1e293b',
           borderRadius: 10,
           fontFamily: "'IBM Plex Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+        },
+        components: {
+          Button: {
+            primaryShadow: '0 4px 14px rgba(0, 110, 255, 0.28)',
+          },
+          Segmented: {
+            itemSelectedBg: '#e6f0ff',
+            itemSelectedColor: '#0052d9',
+          },
         },
       }}
     >

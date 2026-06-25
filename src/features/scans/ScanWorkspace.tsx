@@ -15,20 +15,24 @@ import {
   Space,
   Switch,
   Tag,
+  Tooltip,
   Typography,
 } from 'antd';
 import {
   ApiOutlined,
   BugOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
   DashboardOutlined,
   FileSearchOutlined,
+  MinusCircleOutlined,
   PlusOutlined,
   RobotOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { EvidenceModuleKey, ScanMode } from './types';
+import type { EvidenceModuleKey, EvidenceModuleView, ScanMode } from './types';
 import { EVIDENCE_MODULE_STATUS_META, buildEvidenceModules } from './evidenceModules';
 import { buildScanReadiness } from './scanReadiness';
 import { ScanProgressPanel } from './ScanProgressPanel';
@@ -39,8 +43,47 @@ import {
   type ScanPayload,
 } from './resolveScanPayload';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 const API_BASE_URL = import.meta.env.VITE_FRONTSCOPE_API_BASE_URL ?? 'http://localhost:3001';
+
+const HERO_CAPABILITIES = [
+  '运行时',
+  'Lighthouse',
+  'Network',
+  '项目质量',
+  '内存',
+  'AI 诊断',
+] as const;
+
+function moduleStatusClass(status: EvidenceModuleView['status']): string {
+  switch (status) {
+    case 'scanning':
+      return 'module-card--scanning';
+    case 'collected':
+      return 'module-card--collected';
+    case 'failed':
+      return 'module-card--failed';
+    default:
+      return '';
+  }
+}
+
+function moduleStatusDotClass(status: EvidenceModuleView['status']): string {
+  return `module-status-dot module-status-dot--${status}`;
+}
+
+function readinessIcon(status: 'pass' | 'fail' | 'pending' | 'skipped') {
+  switch (status) {
+    case 'pass':
+      return <CheckCircleOutlined style={{ color: '#16a34a' }} />;
+    case 'fail':
+      return <CloseCircleOutlined style={{ color: '#dc2626' }} />;
+    case 'pending':
+      return <MinusCircleOutlined style={{ color: '#006eff' }} />;
+    default:
+      return <MinusCircleOutlined style={{ color: '#94a3b8' }} />;
+  }
+}
 
 const moduleIcon: Record<EvidenceModuleKey, ReactNode> = {
   runtime: <BugOutlined />,
@@ -389,13 +432,22 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
   return (
     <div className="page-workspace">
       <header className="workspace-hero">
-        <Text className="eyebrow">性能 · 网络 · 内存 · 代码质量</Text>
-        <Title level={2} className="workspace-hero-title">
-          前端证据体检工作台
-        </Title>
-        <Paragraph className="workspace-hero-desc">
-          配置目标页面与扫描模式，采集运行时、性能与项目证据，生成可导出的体检报告。
-        </Paragraph>
+        <div className="workspace-hero-inner">
+          <div className="workspace-hero-copy">
+            <Text className="workspace-hero-eyebrow">Evidence-first · Local-first</Text>
+            <Title level={2} className="workspace-hero-title">
+              前端AI Health Check工作台
+            </Title>
+          </div>
+          <div className="capability-strip" role="list" aria-label="扫描能力">
+            {HERO_CAPABILITIES.map((cap) => (
+              <span key={cap} className="capability-pill" role="listitem">
+                <span className="capability-pill-dot" aria-hidden />
+                {cap}
+              </span>
+            ))}
+          </div>
+        </div>
       </header>
 
       <Row gutter={[24, 24]}>
@@ -559,32 +611,24 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
               </Form.Item>
 
               {!aiStatusLoading && aiStatus && !aiStatus.ready && (
-                <Alert
-                  type="warning"
-                  showIcon
-                  style={{ marginBottom: 16 }}
-                  message="AI 配置未就绪"
-                  description={
-                    <div>
-                      <div>Provider：{aiStatus.provider}</div>
-                      <div>API Key：{aiStatus.apiKeyConfigured ? '已配置' : '未配置'}</div>
-                      <div>模型：{aiStatus.model ?? '未配置'}</div>
-                      <div style={{ marginTop: 8 }}>
-                        请在 <Text code>frontscope.config.json</Text> 或环境变量中配置 openai provider、API Key 与模型。
-                      </div>
-                    </div>
-                  }
-                />
+                <div className="ai-status-bar ai-status-bar--warn">
+                  <Tag color="warning">AI 配置未就绪</Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    API Key：{aiStatus.apiKeyConfigured ? '已配置' : '未配置'}
+                  </Text>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    模型：{aiStatus.model ?? '未配置'}
+                  </Text>
+                </div>
               )}
 
               {!aiStatusLoading && aiStatus?.ready && (
-                <Alert
-                  type="success"
-                  showIcon
-                  style={{ marginBottom: 16 }}
-                  message="AI 配置已就绪"
-                  description={`将使用 ${aiStatus.model ?? '默认模型'}（${aiStatus.baseURL ?? aiStatus.endpoint}）`}
-                />
+                <div className="ai-status-bar ai-status-bar--ready">
+                  <Tag color="success">AI 配置已就绪</Tag>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {aiStatus.model ?? '默认模型'}
+                  </Text>
+                </div>
               )}
 
               <Button
@@ -592,7 +636,7 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
                 loading={aiTesting}
                 disabled={aiStatusLoading}
                 onClick={() => void handleTestAiConnection()}
-                style={{ marginBottom: 16 }}
+                style={{ marginBottom: aiConnectionTest ? 12 : 16 }}
               >
                 {aiTesting ? '正在测试 AI 接口…' : '测试 AI 接口联通'}
               </Button>
@@ -604,23 +648,11 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
                   style={{ marginBottom: 16 }}
                   message={aiConnectionTest.success ? 'AI 接口联通成功' : 'AI 接口联通失败'}
                   description={
-                    <div>
-                      <div>Provider：{aiConnectionTest.provider}</div>
-                      <div>模型：{aiConnectionTest.model ?? '未配置'}</div>
-                      <div>Endpoint：{aiConnectionTest.endpoint ?? aiConnectionTest.baseURL ?? '未配置'}</div>
-                      {aiConnectionTest.success ? (
-                        <>
-                          <div>耗时：{aiConnectionTest.durationMs}ms</div>
-                          {aiConnectionTest.responsePreview && (
-                            <div style={{ marginTop: 8 }}>
-                              响应预览：<Text code>{aiConnectionTest.responsePreview}</Text>
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div style={{ marginTop: 8 }}>{aiConnectionTest.error}</div>
-                      )}
-                    </div>
+                    aiConnectionTest.success ? (
+                      <Text code>{aiConnectionTest.responsePreview ?? `${aiConnectionTest.durationMs}ms`}</Text>
+                    ) : (
+                      aiConnectionTest.error
+                    )
                   }
                 />
               )}
@@ -682,24 +714,46 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
           )}
 
           <Card title="证据采集模块" className="panel workspace-card" style={{ marginBottom: 20 }}>
-            <Row gutter={[16, 16]}>
-              {evidenceModules.map((item) => {
+            <Row gutter={[12, 12]}>
+              {evidenceModules.map((item, index) => {
                 const statusMeta = EVIDENCE_MODULE_STATUS_META[item.status];
                 return (
-                  <Col xs={24} md={12} key={item.key}>
-                    <div className="module-card">
-                      <div className="module-icon">{moduleIcon[item.key]}</div>
-                      <div>
-                        <Text strong>{item.title}</Text>
-                        <Paragraph className="module-description">{item.description}</Paragraph>
-                        <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
-                        {item.statusDetail && (
-                          <Paragraph type="secondary" className="module-description" style={{ marginTop: 8 }}>
-                            {item.statusDetail}
-                          </Paragraph>
-                        )}
+                  <Col xs={24} sm={12} key={item.key}>
+                    <Tooltip title={item.description} placement="top">
+                      <div
+                        className={`module-card ${moduleStatusClass(item.status)}`}
+                        style={{ animationDelay: `${index * 0.05}s` }}
+                      >
+                        <div className="module-icon">{moduleIcon[item.key]}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="module-title-row">
+                            <Text strong style={{ fontSize: 13 }}>
+                              {item.title}
+                            </Text>
+                            <span className={moduleStatusDotClass(item.status)} title={statusMeta.label} />
+                          </div>
+                          <div className="module-caps">
+                            {item.caps.map((cap) => (
+                              <span key={cap} className="module-cap">
+                                {cap}
+                              </span>
+                            ))}
+                          </div>
+                          <Tag color={statusMeta.color} style={{ marginTop: 8 }}>
+                            {statusMeta.label}
+                          </Tag>
+                          {item.statusDetail && (
+                            <Text
+                              type="secondary"
+                              ellipsis
+                              style={{ display: 'block', marginTop: 4, fontSize: 11 }}
+                            >
+                              {item.statusDetail}
+                            </Text>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </Tooltip>
                   </Col>
                 );
               })}
@@ -707,9 +761,12 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
           </Card>
 
           <Card title="体检就绪度" className="panel workspace-card">
-            <Space direction="vertical" size={12} className="full-width">
+            <div className="readiness-ring-wrap">
               <Progress
+                type="circle"
                 percent={scanReadiness.percent}
+                size={88}
+                strokeColor={{ '0%': '#38bdf8', '100%': '#006eff' }}
                 status={
                   scanReadiness.phase === 'scanning'
                     ? 'active'
@@ -720,39 +777,33 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
                         : 'normal'
                 }
               />
-              <Text type="secondary">{scanReadiness.summary}</Text>
-              <Space direction="vertical" size={8} className="full-width">
+              <div className="readiness-checks-compact">
+                <Text type="secondary" style={{ fontSize: 12, marginBottom: 4 }}>
+                  {scanReadiness.summary}
+                </Text>
                 {scanReadiness.checks.map((check) => (
-                  <div key={check.key} className="readiness-check">
-                    <Tag
-                      color={
-                        check.status === 'pass'
-                          ? 'success'
-                          : check.status === 'fail'
-                            ? 'error'
-                            : check.status === 'pending'
-                              ? 'processing'
-                              : 'default'
-                      }
-                    >
-                      {check.status === 'pass'
-                        ? '通过'
-                        : check.status === 'fail'
-                          ? '未满足'
-                          : check.status === 'pending'
-                            ? '进行中'
-                            : '跳过'}
-                    </Tag>
-                    <Text>{check.label}</Text>
-                    {check.detail && (
-                      <Text type="secondary" style={{ marginLeft: 8 }}>
-                        {check.detail}
-                      </Text>
+                  <div key={check.key} className="readiness-check-row">
+                    <span className="readiness-check-icon">{readinessIcon(check.status)}</span>
+                    <Text style={{ flex: 1 }}>{check.label}</Text>
+                    {check.status === 'pass' ? (
+                      <Tag color="success" style={{ margin: 0 }}>
+                        通过
+                      </Tag>
+                    ) : check.status === 'fail' ? (
+                      <Tag color="error" style={{ margin: 0 }}>
+                        未满足
+                      </Tag>
+                    ) : check.status === 'pending' ? (
+                      <Tag color="processing" style={{ margin: 0 }}>
+                        进行中
+                      </Tag>
+                    ) : (
+                      <Tag style={{ margin: 0 }}>跳过</Tag>
                     )}
                   </div>
                 ))}
-              </Space>
-            </Space>
+              </div>
+            </div>
           </Card>
         </Col>
       </Row>

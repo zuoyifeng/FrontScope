@@ -15,7 +15,7 @@ export function AppTopBar({ mode, onNewScan }: AppTopBarProps) {
         <div className="brand-mark">FS</div>
         <div>
           <Text className="brand-name-inline">FrontScope</Text>
-          <Text className="brand-tagline">前端证据体检</Text>
+          <Text className="brand-tagline">证据驱动 · 前端体检</Text>
         </div>
       </div>
       {mode === 'report' && onNewScan ? (
@@ -23,7 +23,10 @@ export function AppTopBar({ mode, onNewScan }: AppTopBarProps) {
           新建扫描
         </Button>
       ) : (
-        <Text className="app-topbar-hint">本地优先 · 证据驱动</Text>
+        <div className="topbar-status">
+          <span className="topbar-status-dot" aria-hidden />
+          本地优先
+        </div>
       )}
     </header>
   );
