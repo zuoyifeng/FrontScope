@@ -1,0 +1,19 @@
+{
+  "ai": {
+    "provider": "openai",
+    "baseURL": "https://api.openai.com/v1",
+    "apiKey": "${OPENAI_API_KEY}",
+    "model": "gpt-4o-mini",
+    "temperature": 0.2,
+    "maxOutputTokens": 2000,
+    "timeoutMs": 60000
+  },
+  "security": {
+    "apiToken": "${FRONTSCOPE_API_TOKEN}",
+    "allowedOrigins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+    "allowPrivateNetwork": true,
+    "allowedProjectRoots": [],
+    "allowedOutputRoots": [],
+    "allowedUrlHosts": []
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "traceEvents": [
+    {
+      "name": "RunTask",
+      "cat": "devtools.timeline",
+      "ph": "X",
+      "ts": 1000000,
+      "dur": 82000,
+      "args": {
+        "data": {
+          "stackTrace": [
+            { "functionName": "renderDashboard", "url": "src/App.tsx", "lineNumber": 42 },
+            { "functionName": "commitRoot", "url": "react-dom.js", "lineNumber": 100 }
+          ]
+        }
+      }
+    },
+    {
+      "name": "EvaluateScript",
+      "cat": "devtools.timeline",
+      "ph": "X",
+      "ts": 1010000,
+      "dur": 30000,
+      "args": {}
+    },
+    {
+      "name": "Layout",
+      "cat": "devtools.timeline",
+      "ph": "X",
+      "ts": 1050000,
+      "dur": 12000,
+      "args": {}
+    },
+    {
+      "name": "RecalculateStyles",
+      "cat": "devtools.timeline",
+      "ph": "X",
+      "ts": 1065000,
+      "dur": 8000,
+      "args": {}
+    },
+    {
+      "name": "Paint",
+      "cat": "devtools.timeline",
+      "ph": "X",
+      "ts": 1080000,
+      "dur": 5000,
+      "args": {}
+    },
+    {
+      "name": "ResourceReceiveResponse",
+      "cat": "loading",
+      "ph": "X",
+      "ts": 1090000,
+      "dur": 6000,
+      "args": {}
+    },
+    {
+      "name": "LayoutShift",
+      "cat": "loading,devtools.timeline",
+      "ph": "I",
+      "ts": 1100000,
+      "args": {
+        "data": {
+          "score": 0.12,
+          "impacted_nodes": [
+            { "node_name": "div.hero" },
+            { "node_name": "img.banner" }
+          ]
+        }
+      }
+    }
+  ]
+}

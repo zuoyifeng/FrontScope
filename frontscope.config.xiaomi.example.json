@@ -1,0 +1,20 @@
+{
+  "ai": {
+    "provider": "openai",
+    "baseURL": "https://api.xiaomimimo.com/v1",
+    "authHeader": "api-key",
+    "apiKey": "${MIMO_API_KEY}",
+    "model": "mimo-v2.5-pro",
+    "temperature": 0.2,
+    "maxOutputTokens": 2000,
+    "timeoutMs": 60000
+  },
+  "security": {
+    "apiToken": "${FRONTSCOPE_API_TOKEN}",
+    "allowedOrigins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+    "allowPrivateNetwork": true,
+    "allowedProjectRoots": [],
+    "allowedOutputRoots": [],
+    "allowedUrlHosts": []
+  }
+}

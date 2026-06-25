@@ -1,0 +1,41 @@
+{
+  "name": "frontscope",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:api": "tsx server/index.ts",
+    "build": "tsc -p tsconfig.scanner.json && tsc -b && vite build",
+    "preview": "vite preview",
+    "scan": "tsx scanner/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.5.2",
+    "@hono/node-server": "^1.13.0",
+    "antd": "^5.22.5",
+    "chrome-launcher": "^1.1.2",
+    "commander": "^12.1.0",
+    "hono": "^4.6.0",
+    "lighthouse": "^12.2.1",
+    "playwright": "^1.49.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^25.0.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.8"
+  }
+}

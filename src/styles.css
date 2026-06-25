@@ -1,0 +1,151 @@
+:root {
+  color: #172033;
+  background: #f5f7fb;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: #f5f7fb;
+}
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.app-sider {
+  padding: 24px 16px;
+  background: #0f172a !important;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.brand-mark {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 8px;
+  color: #eff6ff;
+  background: #2563eb;
+  font-weight: 700;
+}
+
+.brand-name,
+.brand-subtitle {
+  display: block;
+}
+
+.brand-name {
+  color: #ffffff !important;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.brand-subtitle {
+  color: #94a3b8 !important;
+  font-size: 12px;
+}
+
+.nav-stack {
+  width: 100%;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: auto;
+  padding: 28px 32px 12px;
+  background: #f5f7fb;
+  line-height: 1.2;
+}
+
+.app-header h2 {
+  margin: 4px 0 0;
+}
+
+.eyebrow {
+  color: #64748b !important;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.app-content {
+  padding: 20px 32px 32px;
+}
+
+.panel {
+  border-color: #e2e8f0;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+.primary-action {
+  margin-top: 16px;
+}
+
+.module-card {
+  display: flex;
+  min-height: 120px;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.module-icon {
+  display: grid;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 8px;
+  color: #2563eb;
+  background: #eff6ff;
+  font-size: 18px;
+}
+
+.module-description {
+  margin: 6px 0 10px !important;
+  color: #64748b;
+}
+
+.full-width {
+  width: 100%;
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    display: block;
+  }
+
+  .app-sider {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+
+  .app-header {
+    padding: 24px 20px 8px;
+  }
+
+  .app-content {
+    padding: 16px 20px 24px;
+  }
+}
