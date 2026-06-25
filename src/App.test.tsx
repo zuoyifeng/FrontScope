@@ -201,13 +201,30 @@ describe('App', () => {
     vi.unstubAllGlobals();
   });
 
+  it('opens the report page after a successful scan', async () => {
+    mockFetch({ aiStatus: mockAiStatusReady });
+    render(<App />);
+
+    fireEvent.change(screen.getByPlaceholderText('http://localhost:5173 或 https://example.com'), {
+      target: { value: 'http://localhost:5173' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '开始扫描' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('scan-1')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('证据采集模块')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '复制 Markdown 路径' })).toBeInTheDocument();
+  });
+
   it('renders the Chinese FrontScope scan workspace', async () => {
     mockFetch({ aiStatus: mockAiStatusNotReady });
     render(<App />);
 
     expect(screen.getByText('FrontScope')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '前端证据体检工作台' })).toBeInTheDocument();
-    expect(screen.getAllByText('开始扫描')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: '开始扫描' })).toBeInTheDocument();
     expect(screen.getByText('证据采集模块')).toBeInTheDocument();
     expect(screen.getByText('运行时诊断')).toBeInTheDocument();
     expect(screen.getByText('Network 资源诊断')).toBeInTheDocument();

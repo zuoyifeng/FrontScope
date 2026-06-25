@@ -38,18 +38,85 @@ body {
 
 .app-shell {
   min-height: 100vh;
+  background: var(--fs-bg);
 }
 
-.app-sider {
-  padding: 24px 16px;
-  background: var(--fs-navy) !important;
+.app-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px clamp(20px, 4vw, 40px);
+  border-bottom: 1px solid var(--fs-border);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.app-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brand-name-inline {
+  display: block;
+  color: var(--fs-ink) !important;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.brand-tagline {
+  display: block;
+  color: var(--fs-muted) !important;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.app-topbar-hint {
+  color: var(--fs-muted) !important;
+  font-size: 12px;
+}
+
+.app-main {
+  padding: clamp(20px, 3vw, 36px) clamp(20px, 4vw, 40px) 48px;
+}
+
+.page-workspace,
+.page-report {
+  max-width: 1240px;
+  margin: 0 auto;
+}
+
+.workspace-hero {
+  margin-bottom: 28px;
+  padding-bottom: 8px;
+}
+
+.workspace-hero-title {
+  margin: 6px 0 8px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em;
+}
+
+.workspace-hero-desc {
+  max-width: 56ch;
+  margin-bottom: 0 !important;
+  color: var(--fs-muted) !important;
+  font-size: 15px;
+}
+
+.workspace-card .ant-card-head {
+  border-bottom-color: var(--fs-border);
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 28px;
 }
 
 .brand-mark {
@@ -516,22 +583,12 @@ body {
 }
 
 @media (max-width: 900px) {
-  .app-shell {
-    display: block;
+  .app-topbar {
+    padding: 14px 16px;
   }
 
-  .app-sider {
-    width: 100% !important;
-    max-width: none !important;
-    min-width: 0 !important;
-  }
-
-  .app-header {
-    padding: 24px 20px 8px;
-  }
-
-  .app-content {
-    padding: 16px 20px 24px;
+  .app-main {
+    padding: 16px;
   }
 
   .metric-grid {
