@@ -40,3 +40,6 @@ coverage/
 docs/superpowers/
 docs/frontscope-product-spec.md
 docs/frontscope-v0.1-implementation-plan.md
+
+# Cursor IDE
+.cursor/
