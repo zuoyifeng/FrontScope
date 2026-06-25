@@ -31,6 +31,8 @@ describe('parseAiDiagnosis', () => {
             evidenceIds: ['runtime.console.0'],
             possibleCause: '组件在布局变化时触发浏览器警告。',
             suggestion: '定位触发 ResizeObserver 的组件并降低重复布局。',
+            optimizationDirection: '减少同步布局读写与频繁 resize 回调，降低主线程抖动。',
+            implementationSteps: ['在 DevTools 中定位触发 ResizeObserver 的组件', '将布局读取与写入拆分到 requestAnimationFrame'],
             verifyMethod: '重新扫描并确认 console error 为 0。',
           },
         ],
@@ -57,6 +59,8 @@ describe('parseAiDiagnosis', () => {
               evidenceIds: [],
               possibleCause: '未知',
               suggestion: '优化代码',
+              optimizationDirection: '先补齐证据再给出代码级建议。',
+              implementationSteps: ['补充扫描证据', '重新生成 AI 诊断'],
               verifyMethod: '重新测试',
             },
           ],
@@ -64,7 +68,7 @@ describe('parseAiDiagnosis', () => {
         }),
         new Set(evidence.map((item) => item.id)),
       ),
-    ).toThrow('AI issue must reference at least one evidence id');
+    ).toThrow(/evidenceIds|evidence id/);
   });
 
   it('rejects evidence ids that are not present in compacted evidence', () => {
@@ -81,6 +85,8 @@ describe('parseAiDiagnosis', () => {
               evidenceIds: ['lighthouse.audit.missing'],
               possibleCause: '未知',
               suggestion: '补充证据',
+              optimizationDirection: '仅引用真实 evidence id。',
+              implementationSteps: ['检查 evidence 列表', '修正 evidenceIds'],
               verifyMethod: '重新扫描',
             },
           ],
@@ -108,6 +114,8 @@ describe('analyzeWithAi', () => {
               evidenceIds: ['lighthouse.metric.lcp'],
               possibleCause: '首屏资源加载较慢。',
               suggestion: '检查首屏资源体积和阻塞脚本。',
+              optimizationDirection: '优先削减首屏 JS/CSS 体积并推迟非关键脚本执行。',
+              implementationSteps: ['用 Coverage/Network 定位大资源', '对路由级组件做 lazy import', '为 LCP 图片设置 priority/preload'],
               verifyMethod: '重新扫描并确认 LCP 降低。',
             },
           ],
@@ -136,6 +144,8 @@ describe('analyzeWithAi', () => {
               evidenceIds: ['runtime.console.0'],
               possibleCause: 'c',
               suggestion: 's',
+              optimizationDirection: '优先优化首屏资源加载性能与体积。',
+              implementationSteps: ['步骤一', '步骤二'],
               verifyMethod: 'v',
             },
           ],

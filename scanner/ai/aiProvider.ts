@@ -22,6 +22,13 @@ export function createMockAiProvider(): AiProvider {
                 evidenceIds: [firstEvidence.id],
                 possibleCause: '该问题来自自动采集证据，需要结合项目上下文确认根因。',
                 suggestion: '先定位证据对应的页面或配置，再做最小修复。',
+                optimizationDirection: '以最小改动消除当前证据指出的风险，避免在根因未确认前做大范围重构。',
+                implementationSteps: [
+                  '根据 evidence id 在报告中定位原始证据与受影响模块。',
+                  '在本地复现问题并做最小修复（组件、配置或依赖层面）。',
+                  '重新运行 FrontScope 扫描，确认相关 evidence 消失或指标改善。',
+                ],
+                codeHints: firstEvidence.detail,
                 verifyMethod: '重新运行 FrontScope 扫描并确认该证据消失或指标改善。',
               },
             ]

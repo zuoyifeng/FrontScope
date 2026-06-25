@@ -1,12 +1,35 @@
-export interface ScanModule {
-  key: 'runtime' | 'performance' | 'network' | 'package';
+export type EvidenceModuleKey = 'runtime' | 'performance' | 'network' | 'project' | 'memory' | 'ai';
+
+export type EvidenceModuleStatus =
+  | 'pending'
+  | 'skipped'
+  | 'scanning'
+  | 'collected'
+  | 'failed'
+  | 'blocked';
+
+export interface EvidenceModuleView {
+  key: EvidenceModuleKey;
   title: string;
   description: string;
-  status: 'planned' | 'ready' | 'blocked';
+  status: EvidenceModuleStatus;
+  statusDetail?: string;
 }
 
-export interface ReportPreview {
-  readiness: number;
+export type ReadinessCheckStatus = 'pass' | 'fail' | 'pending' | 'skipped';
+
+export interface ReadinessCheck {
+  key: string;
+  label: string;
+  status: ReadinessCheckStatus;
+  detail?: string;
+}
+
+export interface ScanReadinessView {
+  phase: 'pre' | 'scanning' | 'post';
+  percent: number;
+  checks: ReadinessCheck[];
+  summary: string;
 }
 
 export type HealthLevel = 'good' | 'warning' | 'critical';
@@ -20,6 +43,9 @@ export interface AiIssueView {
   evidenceIds: string[];
   possibleCause: string;
   suggestion: string;
+  optimizationDirection?: string;
+  implementationSteps?: string[];
+  codeHints?: string;
   verifyMethod: string;
 }
 

@@ -205,14 +205,22 @@ function createMarkdownReport(result: ScanResult): string {
     ? `- 健康等级: ${result.aiDiagnosis.healthLevel}
 - 摘要: ${result.aiDiagnosis.summary}
 
-| 优先级 | 类别 | 问题 | 证据 | 建议 | 验证方法 |
-| --- | --- | --- | --- | --- | --- |
 ${result.aiDiagnosis.topIssues
-  .map(
-    (issue) =>
-      `| ${issue.severity} | ${issue.category} | ${issue.title} | ${issue.evidenceIds.join(', ')} | ${issue.suggestion} | ${issue.verifyMethod} |`,
-  )
-  .join('\n')}
+  .map((issue, index) => {
+    const steps = issue.implementationSteps?.map((step) => `  - ${step}`).join('\n') ?? '  - （无）';
+    return `### ${index + 1}. [${issue.severity}] ${issue.title}
+
+- 类别: ${issue.category}
+- 证据: ${issue.evidenceIds.join(', ')}
+- 可能原因: ${issue.possibleCause}
+- 修复方向: ${issue.suggestion}
+- 优化策略: ${issue.optimizationDirection ?? issue.suggestion}
+- 实施步骤:
+${steps}
+- 代码/配置提示: ${issue.codeHints ?? '（证据不足，未给出）'}
+- 验证方法: ${issue.verifyMethod}`;
+  })
+  .join('\n\n')}
 
 后续动作:
 ${result.aiDiagnosis.nextActions.map((action) => `- ${action}`).join('\n') || '- 无'}`

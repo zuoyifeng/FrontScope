@@ -20,8 +20,10 @@ export interface OpenAiProviderOptions {
 }
 
 const DEFAULT_TEMPERATURE = 0.2;
-const DEFAULT_MAX_OUTPUT_TOKENS = 2000;
+const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
 const DEFAULT_TIMEOUT_MS = 60_000;
+const TEST_MAX_OUTPUT_TOKENS = 16;
+const TEST_TIMEOUT_MS = 15_000;
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
@@ -92,6 +94,77 @@ async function safeReadText(response: Response): Promise<string> {
     return text.slice(0, 500);
   } catch {
     return '';
+  }
+}
+
+function buildTestRequestBody(options: OpenAiProviderOptions): Record<string, unknown> {
+  const authHeader = options.authHeader ?? 'bearer';
+  const messages = [
+    { role: 'system', content: 'You are a connectivity probe. Reply with a short JSON object like {"ok":true}.' },
+    { role: 'user', content: 'ping' },
+  ];
+
+  if (authHeader === 'api-key') {
+    return {
+      model: options.model,
+      messages,
+      temperature: 0,
+      max_completion_tokens: TEST_MAX_OUTPUT_TOKENS,
+      thinking: { type: 'disabled' },
+    };
+  }
+
+  return {
+    model: options.model,
+    messages,
+    temperature: 0,
+    max_tokens: TEST_MAX_OUTPUT_TOKENS,
+  };
+}
+
+/**
+ * Send a minimal chat completion request to verify credentials and endpoint reachability.
+ */
+export async function testOpenAiConnection(
+  options: OpenAiProviderOptions,
+): Promise<{ content: string; durationMs: number }> {
+  const baseURL = trimTrailingSlash(options.baseURL ?? DEFAULT_OPENAI_BASE_URL);
+  const fetchImpl: FetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+  const startedAt = Date.now();
+  const authHeader = options.authHeader ?? 'bearer';
+  const timeoutMs = Math.min(options.timeoutMs ?? DEFAULT_TIMEOUT_MS, TEST_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetchImpl(`${baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...buildAuthHeaders(options.apiKey, authHeader),
+      },
+      body: JSON.stringify(buildTestRequestBody(options)),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const detail = await safeReadText(response);
+      throw new Error(`AI 接口请求失败: ${response.status} ${response.statusText} ${detail}`.trim());
+    }
+
+    const content = extractContent(await response.json());
+    if (!content?.trim()) {
+      throw new Error('AI 接口返回内容为空，连通性测试未通过。');
+    }
+
+    return { content: content.trim(), durationMs: Date.now() - startedAt };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`AI 接口请求超时（${timeoutMs} ms）。`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

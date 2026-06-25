@@ -42,6 +42,8 @@ describe('runAiDiagnosis', () => {
               evidenceIds: ['lighthouse.metric.lcp'],
               possibleCause: 'c',
               suggestion: 's',
+              optimizationDirection: '优先优化 LCP 相关资源加载与渲染路径。',
+              implementationSteps: ['步骤一', '步骤二'],
               verifyMethod: 'v',
             },
           ],

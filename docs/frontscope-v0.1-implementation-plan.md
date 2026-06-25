@@ -1032,6 +1032,21 @@ PASS TypeScript compilation.
 **Files:**
 - No source changes unless verification exposes a bug.
 
+- [ ] **Step 0: Start FrontScope (web UI + API)**
+
+Run from the FrontScope repository:
+
+```bash
+pnpm dev
+```
+
+Expected:
+
+```text
+Web UI at http://localhost:5173
+API at http://localhost:3001
+```
+
 - [ ] **Step 1: Start a target frontend project manually**
 
 Run in any Vue/Vite or React/Vite project:
@@ -1048,10 +1063,10 @@ Target app is reachable at http://localhost:5173 or another local URL.
 
 - [ ] **Step 2: Run FrontScope against the target app**
 
-Run from the FrontScope repository:
+Run from the FrontScope repository (CLI) or use the web UI at http://localhost:5173:
 
 ```bash
-pnpm dev -- --project /absolute/path/to/target-project --url http://localhost:5173 --name home
+pnpm scan -- --project /absolute/path/to/target-project --url http://localhost:5173 --name home
 ```
 
 Expected:

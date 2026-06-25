@@ -224,6 +224,8 @@ describe('runScan', () => {
               evidenceIds: ['lighthouse.metric.lcp'],
               possibleCause: '首屏资源加载较慢。',
               suggestion: '检查首屏 JS 和图片资源。',
+              optimizationDirection: '削减首屏 JS/CSS 体积并推迟非关键脚本。',
+              implementationSteps: ['定位大体积资源', '路由级 lazy import', '为 LCP 图片设置 priority'],
               verifyMethod: '重新扫描并确认 LCP 下降。',
             },
           ],

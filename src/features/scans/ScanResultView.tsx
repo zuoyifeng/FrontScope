@@ -1,4 +1,5 @@
-import { Alert, Button, Card, Col, Descriptions, Empty, Row, Statistic, Table, Tabs, Tag, Typography } from 'antd';
+import type { CSSProperties } from 'react';
+import { Alert, Card, Col, Descriptions, Empty, Row, Space, Statistic, Table, Tabs, Tag, Typography } from 'antd';
 import { FolderOpenOutlined, RobotOutlined } from '@ant-design/icons';
 import type {
   AiIssueView,
@@ -12,7 +13,7 @@ import type {
   TargetUrlMismatchReason,
 } from './types';
 
-const { Text, Paragraph } = Typography;
+const { Text, Paragraph, Title } = Typography;
 
 interface ScanResultViewProps {
   result: ScanResultModel;
@@ -33,33 +34,28 @@ const codeReviewRowKey = (record: CodeReviewFindingView) => `${record.ruleId}-${
 const memoryConstructorRowKey = (record: MemoryConstructorView) => `${record.name}-${record.count}-${record.selfSizeBytes}`;
 const comparisonMetricRowKey = (record: ScanMetricComparisonView) => record.key;
 
-function ReportPathsCard({ scanDir, scanJsonPath, reportMarkdownPath }: Pick<ScanResultViewProps, 'scanDir' | 'scanJsonPath' | 'reportMarkdownPath'>) {
+function ReportPathsBar({ scanDir, scanJsonPath, reportMarkdownPath }: Pick<ScanResultViewProps, 'scanDir' | 'scanJsonPath' | 'reportMarkdownPath'>) {
   return (
-    <Alert
-      type="success"
-      showIcon
-      icon={<FolderOpenOutlined />}
-      message="报告已导出到本地"
-      description={
-        <Descriptions column={1} size="small" style={{ marginTop: 8 }}>
-          <Descriptions.Item label="报告目录">
-            <Text copyable={{ text: scanDir }}>{scanDir}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="Markdown">
-            <Text copyable={{ text: reportMarkdownPath }}>{reportMarkdownPath}</Text>
-          </Descriptions.Item>
-          <Descriptions.Item label="JSON 证据">
-            <Text copyable={{ text: scanJsonPath }}>{scanJsonPath}</Text>
-          </Descriptions.Item>
-        </Descriptions>
-      }
-      action={
-        <Button size="small" type="primary" onClick={() => navigator.clipboard.writeText(reportMarkdownPath)}>
-          复制 Markdown 路径
-        </Button>
-      }
-      style={{ marginBottom: 16 }}
-    />
+    <div className="scan-report-paths">
+      <span className="path-chip">
+        <span className="path-chip-label">目录</span>
+        <Text copyable={{ text: scanDir }} style={{ color: 'inherit', fontSize: 'inherit' }}>
+          {scanDir}
+        </Text>
+      </span>
+      <span className="path-chip">
+        <span className="path-chip-label">Markdown</span>
+        <Text copyable={{ text: reportMarkdownPath }} style={{ color: 'inherit', fontSize: 'inherit' }}>
+          {reportMarkdownPath}
+        </Text>
+      </span>
+      <span className="path-chip">
+        <span className="path-chip-label">JSON</span>
+        <Text copyable={{ text: scanJsonPath }} style={{ color: 'inherit', fontSize: 'inherit' }}>
+          {scanJsonPath}
+        </Text>
+      </span>
+    </div>
   );
 }
 
@@ -145,64 +141,65 @@ function formatTargetMismatchDescription(result: ScanResultModel): string {
   return `请求地址：${requestedUrl}\n最终地址：${finalUrl}\n${reasonLabel}`;
 }
 
-function HealthBanner({ result }: { result: ScanResultModel }) {
+function ReportHero({
+  result,
+  scanDir,
+  scanJsonPath,
+  reportMarkdownPath,
+}: Pick<ScanResultViewProps, 'result' | 'scanDir' | 'scanJsonPath' | 'reportMarkdownPath'>) {
   const ai = result.aiDiagnosis;
   const aiMeta = result.aiRunMeta;
   const aiError = result.errors.find((error) => error.module === 'ai');
   const targetMismatch = result.runtime?.targetUrlMatched === false;
-
-  if (targetMismatch) {
-    return (
-      <Alert
-        type="error"
-        showIcon
-        message="未命中目标页面，扫描结果可能是登录页或无权限页面"
-        description={formatTargetMismatchDescription(result)}
-        style={{ marginBottom: 16 }}
-      />
-    );
-  }
-
-  if (ai) {
-    const meta = HEALTH_META[ai.healthLevel];
-    return (
-      <Alert
-        type={meta.color}
-        showIcon
-        message={`AI 健康评级：${meta.label}（${ai.healthLevel}）`}
-        description={ai.summary}
-        style={{ marginBottom: 16 }}
-      />
-    );
-  }
-
-  if (result.input.enableAi) {
-    return (
-      <Alert
-        type="error"
-        showIcon
-        message="AI 诊断已开启但未成功返回"
-        description={
-          aiMeta?.error ??
-          aiError?.message ??
-          '请检查 frontscope.config.json 与 MIMO_API_KEY 环境变量，并在「AI 诊断」页签查看调用详情。'
-        }
-        style={{ marginBottom: 16 }}
-      />
-    );
-  }
-
+  const scanModeLabel = result.scanMode === 'local' ? '本地模式' : '线上模式';
   const errorCount = result.errors.length;
   const perf = result.lighthouse?.scores.performance ?? null;
-  const type = errorCount > 0 ? 'warning' : 'info';
+
+  let pillClass = 'health-pill health-pill--info';
+  let pillLabel = '扫描完成';
+  let summary = `性能分数 ${perf ?? 'n/a'}。可在概览页查看各模块证据与指标对比。`;
+
+  if (targetMismatch) {
+    pillClass = 'health-pill health-pill--critical';
+    pillLabel = '目标未命中';
+    summary = formatTargetMismatchDescription(result);
+  } else if (ai) {
+    const meta = HEALTH_META[ai.healthLevel];
+    pillClass = `health-pill health-pill--${ai.healthLevel === 'good' ? 'good' : ai.healthLevel === 'warning' ? 'warning' : 'critical'}`;
+    pillLabel = `AI · ${meta.label}`;
+    summary = ai.summary;
+  } else if (result.input.enableAi) {
+    pillClass = 'health-pill health-pill--critical';
+    pillLabel = 'AI 诊断失败';
+    summary =
+      aiMeta?.error ??
+      aiError?.message ??
+      '请检查 frontscope.config.json 与 API Key，并在「AI 诊断」页签查看调用详情。';
+  } else if (errorCount > 0) {
+    pillClass = 'health-pill health-pill--warning';
+    pillLabel = `${errorCount} 个模块异常`;
+    summary = `未开启 AI 诊断。${errorCount} 个采集模块出现异常，请查看概览中的模块状态。`;
+  }
+
   return (
-    <Alert
-      type={type}
-      showIcon
-      message={`扫描完成${errorCount > 0 ? `，${errorCount} 个模块异常` : ''}`}
-      description={`未开启 AI 诊断。性能分数 ${perf ?? 'n/a'}，可在表单中开启“生成 AI 诊断”获得带证据的修复建议。`}
-      style={{ marginBottom: 16 }}
-    />
+    <header className="scan-report-hero">
+      <div className="scan-report-hero-top">
+        <div>
+          <span className={pillClass}>{pillLabel}</span>
+          <Title level={2} className="scan-report-hero-title">
+            {result.input.pageName ?? result.runtime?.title ?? '页面体检'}
+          </Title>
+          <Text className="scan-report-hero-sub">
+            {scanModeLabel} · {result.id} · {result.input.url}
+          </Text>
+        </div>
+        <Tag color="cyan" style={{ margin: 0, border: 'none' }}>
+          <FolderOpenOutlined /> 已导出
+        </Tag>
+      </div>
+      <Paragraph className="scan-report-summary">{summary}</Paragraph>
+      <ReportPathsBar scanDir={scanDir} scanJsonPath={scanJsonPath} reportMarkdownPath={reportMarkdownPath} />
+    </header>
   );
 }
 
@@ -238,6 +235,38 @@ function AiCallMetaCard({ meta }: { meta: AiRunMetaView }) {
   );
 }
 
+function LighthouseScoreRow({ result }: { result: ScanResultModel }) {
+  const scores = result.lighthouse?.scores;
+  if (!scores) return null;
+
+  const items = [
+    { label: 'Performance', value: scores.performance },
+    { label: 'Accessibility', value: scores.accessibility },
+    { label: 'Best Practices', value: scores.bestPractices },
+    { label: 'SEO', value: scores.seo },
+  ];
+
+  return (
+    <div className="lighthouse-scores">
+      {items.map((item) => {
+        const value = item.value ?? 0;
+        const color = scoreColor(item.value);
+        return (
+          <div key={item.label} className="lighthouse-score-card">
+            <div
+              className="lighthouse-score-ring"
+              style={{ '--score': value, '--ring-color': color } as CSSProperties}
+            >
+              <span className="lighthouse-score-value">{item.value ?? '—'}</span>
+            </div>
+            <div className="lighthouse-score-label">{item.label}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ScoreCards({ result }: { result: ScanResultModel }) {
   const scores = result.lighthouse?.scores;
   const runtimeErrors = (result.runtime?.consoleErrors.length ?? 0) + (result.runtime?.pageErrors.length ?? 0);
@@ -246,27 +275,58 @@ function ScoreCards({ result }: { result: ScanResultModel }) {
   const codeReviewFindings = result.projectQuality?.codeReview.findings.length ?? 0;
   const detachedNodes = result.memory?.baseline?.stats.detachedNodeCount ?? 0;
   const cards = [
-    { title: 'Performance', value: scores?.performance ?? null, color: scoreColor(scores?.performance ?? null) },
-    { title: '运行时错误', value: runtimeErrors, color: runtimeErrors > 0 ? '#dc2626' : '#16a34a' },
-    { title: '失败请求', value: failedRequests, color: failedRequests > 0 ? '#dc2626' : '#16a34a' },
-    { title: 'Long Task', value: longTasks, color: longTasks > 0 ? '#d97706' : '#16a34a' },
-    { title: '代码审查问题', value: codeReviewFindings, color: codeReviewFindings > 0 ? '#d97706' : '#16a34a' },
-    { title: 'Detached DOM', value: detachedNodes, color: detachedNodes > 0 ? '#d97706' : '#16a34a' },
+    {
+      title: 'Performance',
+      value: scores?.performance ?? '—',
+      sub: scores?.performance != null ? 'Lighthouse' : '未采集',
+      color: scoreColor(scores?.performance ?? null),
+    },
+    {
+      title: '运行时错误',
+      value: runtimeErrors,
+      sub: 'Console + Page',
+      color: runtimeErrors > 0 ? '#dc2626' : '#059669',
+    },
+    {
+      title: '失败请求',
+      value: failedRequests,
+      sub: 'Network',
+      color: failedRequests > 0 ? '#dc2626' : '#059669',
+    },
+    {
+      title: 'Long Task',
+      value: longTasks,
+      sub: 'Trace',
+      color: longTasks > 0 ? '#d97706' : '#059669',
+    },
+    {
+      title: '代码审查',
+      value: result.projectEvidenceEnabled ? codeReviewFindings : '—',
+      sub: result.projectEvidenceEnabled ? '本地 AST' : '线上跳过',
+      color: codeReviewFindings > 0 ? '#d97706' : '#059669',
+    },
+    {
+      title: 'Detached DOM',
+      value: result.memory ? detachedNodes : '—',
+      sub: result.memory ? 'Memory' : '未启用',
+      color: detachedNodes > 0 ? '#d97706' : '#059669',
+    },
   ];
+
   return (
-    <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+    <div className="metric-grid">
       {cards.map((card) => (
-        <Col xs={12} md={8} xl={4} key={card.title}>
-          <Card size="small" className="panel">
-            <Statistic
-              title={card.title}
-              value={card.value ?? '—'}
-              valueStyle={{ color: card.color, fontWeight: 700 }}
-            />
-          </Card>
-        </Col>
+        <div
+          key={card.title}
+          className="metric-tile"
+          style={{ '--metric-color': card.color, '--metric-accent': card.color } as CSSProperties}
+        >
+          <span className="metric-tile-label">{card.title}</span>
+          <div className="metric-tile-value">{card.value}</div>
+          <span className="metric-tile-sub">{card.sub}</span>
+        </div>
       ))}
-    </Row>
+    </div>
   );
 }
 
@@ -387,31 +447,75 @@ function AiTab({ result }: { result: ScanResultModel }) {
     );
   }
 
-  const columns = [
-    { title: '优先级', dataIndex: 'severity', width: 80, render: (value: IssueSeverity) => <SeverityTag severity={value} /> },
-    { title: '类别', dataIndex: 'category', width: 110, render: (value: string) => <Tag>{value}</Tag> },
-    { title: '问题', dataIndex: 'title' },
-    {
-      title: '证据',
-      dataIndex: 'evidenceIds',
-      render: (value: string[]) => value.map((id) => <Tag key={id}>{id}</Tag>),
-    },
-    { title: '修复建议', dataIndex: 'suggestion' },
-    { title: '验证方法', dataIndex: 'verifyMethod' },
-  ];
-
   return (
     <>
       {meta && <AiCallMetaCard meta={meta} />}
       <Paragraph>{ai.summary}</Paragraph>
-      <Table<AiIssueView>
-        size="small"
-        rowKey={aiIssueRowKey}
-        columns={columns}
-        dataSource={ai.topIssues}
-        pagination={false}
-        style={{ marginBottom: 16 }}
-      />
+      <Space direction="vertical" size={12} className="full-width" style={{ marginBottom: 16 }}>
+        {ai.topIssues.map((issue) => (
+          <Card
+            key={aiIssueRowKey(issue)}
+            size="small"
+            className="panel ai-issue-card"
+            title={
+              <Space wrap>
+                <SeverityTag severity={issue.severity} />
+                <Tag>{issue.category}</Tag>
+                <Text strong>{issue.title}</Text>
+              </Space>
+            }
+          >
+            <Space direction="vertical" size={8} className="full-width">
+              <div>
+                <Text type="secondary">关联证据</Text>
+                <div style={{ marginTop: 4 }}>
+                  {issue.evidenceIds.map((id) => (
+                    <Tag key={id}>{id}</Tag>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Text type="secondary">可能原因</Text>
+                <Paragraph style={{ marginBottom: 0 }}>{issue.possibleCause}</Paragraph>
+              </div>
+              <div>
+                <Text type="secondary">修复方向</Text>
+                <Paragraph style={{ marginBottom: 0 }}>{issue.suggestion}</Paragraph>
+              </div>
+              {issue.optimizationDirection && (
+                <div>
+                  <Text type="secondary">优化策略</Text>
+                  <Paragraph style={{ marginBottom: 0 }}>{issue.optimizationDirection}</Paragraph>
+                </div>
+              )}
+              {issue.implementationSteps && issue.implementationSteps.length > 0 && (
+                <div>
+                  <Text type="secondary">实施步骤</Text>
+                  <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                    {issue.implementationSteps.map((step, index) => (
+                      <li key={index}>{step}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {issue.codeHints && (
+                <div>
+                  <Text type="secondary">代码/配置提示</Text>
+                  <Paragraph>
+                    <Text code style={{ whiteSpace: 'pre-wrap' }}>
+                      {issue.codeHints}
+                    </Text>
+                  </Paragraph>
+                </div>
+              )}
+              <div>
+                <Text type="secondary">验证方法</Text>
+                <Paragraph style={{ marginBottom: 0 }}>{issue.verifyMethod}</Paragraph>
+              </div>
+            </Space>
+          </Card>
+        ))}
+      </Space>
       {ai.nextActions.length > 0 && (
         <Card size="small" title="后续动作" className="panel">
           <ul style={{ margin: 0, paddingLeft: 18 }}>
@@ -499,24 +603,28 @@ function NetworkTab({ result }: { result: ScanResultModel }) {
     <>
       <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={12} md={6}>
-          <Card size="small" className="panel">
+          <div className="inline-stat-card">
             <Statistic title="请求总数" value={summary.totalRequests} />
-          </Card>
+          </div>
         </Col>
         <Col xs={12} md={6}>
-          <Card size="small" className="panel">
-            <Statistic title="失败请求" value={summary.failedRequests} valueStyle={{ color: summary.failedRequests ? '#dc2626' : undefined }} />
-          </Card>
+          <div className="inline-stat-card">
+            <Statistic
+              title="失败请求"
+              value={summary.failedRequests}
+              valueStyle={{ color: summary.failedRequests ? '#dc2626' : undefined }}
+            />
+          </div>
         </Col>
         <Col xs={12} md={6}>
-          <Card size="small" className="panel">
+          <div className="inline-stat-card">
             <Statistic title="缓存命中率" value={Math.round(summary.cacheHitRatio * 100)} suffix="%" />
-          </Card>
+          </div>
         </Col>
         <Col xs={12} md={6}>
-          <Card size="small" className="panel">
+          <div className="inline-stat-card">
             <Statistic title="总传输体积" value={formatBytes(summary.totalTransferSize)} />
-          </Card>
+          </div>
         </Col>
       </Row>
       <Card size="small" title={`慢请求（${summary.slowRequests.length}）`} className="panel" style={{ marginBottom: 16 }}>
@@ -723,11 +831,26 @@ function MemoryTab({ result }: { result: ScanResultModel }) {
 export function ScanResultView({ result, scanDir, scanJsonPath, reportMarkdownPath }: ScanResultViewProps) {
   const aiFailed = Boolean(result.input.enableAi && !result.aiDiagnosis);
   const defaultTab = result.input.enableAi ? 'ai' : 'overview';
-  const scanModeLabel = result.scanMode === 'local' ? '本地模式' : '线上模式';
 
   return (
-    <Card title={`体检结果 · ${result.id} · ${scanModeLabel}`} className="panel">
-      <ReportPathsCard scanDir={scanDir} scanJsonPath={scanJsonPath} reportMarkdownPath={reportMarkdownPath} />
+    <div className="scan-report">
+      <ReportHero
+        result={result}
+        scanDir={scanDir}
+        scanJsonPath={scanJsonPath}
+        reportMarkdownPath={reportMarkdownPath}
+      />
+
+      {result.runtime?.targetUrlMatched === false && (
+        <Alert
+          type="error"
+          showIcon
+          message="未命中目标页面，扫描结果可能是登录页或无权限页面"
+          description={formatTargetMismatchDescription(result)}
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
       {!result.projectEvidenceEnabled && (
         <Alert
           type="info"
@@ -737,12 +860,15 @@ export function ScanResultView({ result, scanDir, scanJsonPath, reportMarkdownPa
           style={{ marginBottom: 16 }}
         />
       )}
-      <HealthBanner result={result} />
+
+      <LighthouseScoreRow result={result} />
       <ScoreCards result={result} />
+
       <Tabs
+        className="scan-report-tabs"
         defaultActiveKey={defaultTab}
         items={[
-          { key: 'overview', label: '概览', children: <OverviewTab result={result} scanJsonPath={scanJsonPath} reportMarkdownPath={reportMarkdownPath} /> },
+          { key: 'overview', label: '概览', children: <div className="scan-report-tab-body"><OverviewTab result={result} scanJsonPath={scanJsonPath} reportMarkdownPath={reportMarkdownPath} /></div> },
           {
             key: 'ai',
             label: (
@@ -750,15 +876,15 @@ export function ScanResultView({ result, scanDir, scanJsonPath, reportMarkdownPa
                 <RobotOutlined /> AI 诊断{aiFailed ? <Tag color="error" style={{ marginLeft: 6 }}>失败</Tag> : null}
               </span>
             ),
-            children: <AiTab result={result} />,
+            children: <div className="scan-report-tab-body"><AiTab result={result} /></div>,
           },
-          { key: 'performance', label: '性能', children: <PerformanceTab result={result} /> },
-          { key: 'network', label: '网络', children: <NetworkTab result={result} /> },
-          { key: 'runtime', label: '运行时', children: <RuntimeTab result={result} /> },
-          { key: 'quality', label: '项目质量', children: <QualityTab result={result} /> },
-          { key: 'memory', label: '内存', children: <MemoryTab result={result} /> },
+          { key: 'performance', label: '性能', children: <div className="scan-report-tab-body"><PerformanceTab result={result} /></div> },
+          { key: 'network', label: '网络', children: <div className="scan-report-tab-body"><NetworkTab result={result} /></div> },
+          { key: 'runtime', label: '运行时', children: <div className="scan-report-tab-body"><RuntimeTab result={result} /></div> },
+          { key: 'quality', label: '项目质量', children: <div className="scan-report-tab-body"><QualityTab result={result} /></div> },
+          { key: 'memory', label: '内存', children: <div className="scan-report-tab-body"><MemoryTab result={result} /></div> },
         ]}
       />
-    </Card>
+    </div>
   );
 }

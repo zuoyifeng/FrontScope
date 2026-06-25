@@ -37,6 +37,7 @@ import type {
   ScanResult,
 } from '../types.js';
 import { validateInput } from './validateInput.js';
+import type { ScanProgressUpdate } from './scanProgress.js';
 
 export interface RunScanResult {
   result: ScanResult;
@@ -56,6 +57,8 @@ export interface RunScanDependencies {
   commandRunner?: CommandRunner;
   /** Injected memory browser driver (used in tests). */
   memoryDriver?: MemoryBrowserDriver;
+  /** Optional progress reporter for Web UI polling. */
+  onProgress?: (update: ScanProgressUpdate) => void;
 }
 
 function toModuleError(module: ScanModuleKey, error: unknown): ScanModuleError {
@@ -71,6 +74,13 @@ function toModuleError(module: ScanModuleKey, error: unknown): ScanModuleError {
     module,
     message: String(error),
   };
+}
+
+function reportProgress(
+  onProgress: RunScanDependencies['onProgress'],
+  update: ScanProgressUpdate,
+): void {
+  onProgress?.(update);
 }
 
 /**
@@ -122,6 +132,7 @@ export async function runScan(rawInput: unknown, dependencies: RunScanDependenci
   let runtime: RuntimeEvidence | undefined;
   let network: NetworkEvidence | undefined;
   let performanceTrace: PerformanceTraceEvidence | undefined;
+  reportProgress(dependencies.onProgress, { stepKey: 'page-session', stepStatus: 'running' });
   try {
     const pageEvidence = await collectPageEvidence(
       {
@@ -137,14 +148,24 @@ export async function runScan(rawInput: unknown, dependencies: RunScanDependenci
     network = pageEvidence.network;
     performanceTrace = pageEvidence.performanceTrace;
     errors.push(...pageEvidence.errors);
+    reportProgress(dependencies.onProgress, {
+      stepKey: 'page-session',
+      stepStatus: pageEvidence.errors.length > 0 && !runtime && !network ? 'failed' : 'completed',
+    });
   } catch (error) {
     errors.push(toModuleError('runtime', error));
     errors.push(toModuleError('network', error));
     errors.push(toModuleError('performance-trace', error));
+    reportProgress(dependencies.onProgress, { stepKey: 'page-session', stepStatus: 'failed' });
   }
 
   let lighthouse: LighthouseEvidence | undefined;
   if (input.authStatePath) {
+    reportProgress(dependencies.onProgress, {
+      stepKey: 'lighthouse',
+      stepStatus: 'skipped',
+      stepDetail: '登录态场景下暂跳过 Lighthouse',
+    });
     errors.push(
       toModuleError(
         'lighthouse',
@@ -152,37 +173,47 @@ export async function runScan(rawInput: unknown, dependencies: RunScanDependenci
       ),
     );
   } else {
+    reportProgress(dependencies.onProgress, { stepKey: 'lighthouse', stepStatus: 'running' });
     try {
       lighthouse = await scanLighthouse({
         url: input.url,
         viewport: input.viewport,
       });
+      reportProgress(dependencies.onProgress, { stepKey: 'lighthouse', stepStatus: 'completed' });
     } catch (error) {
       errors.push(toModuleError('lighthouse', error));
+      reportProgress(dependencies.onProgress, { stepKey: 'lighthouse', stepStatus: 'failed' });
     }
   }
 
   let packageEvidence: PackageEvidence | undefined;
   let projectQuality: ProjectQualityEvidence | undefined;
   if (shouldScanProject && input.projectPath) {
+    reportProgress(dependencies.onProgress, { stepKey: 'project-package', stepStatus: 'running' });
     try {
       packageEvidence = scanPackage(input.projectPath);
+      reportProgress(dependencies.onProgress, { stepKey: 'project-package', stepStatus: 'completed' });
     } catch (error) {
       packageEvidence = undefined;
       errors.push(toModuleError('package', error));
+      reportProgress(dependencies.onProgress, { stepKey: 'project-package', stepStatus: 'failed' });
     }
 
+    reportProgress(dependencies.onProgress, { stepKey: 'project-quality', stepStatus: 'running' });
     try {
       projectQuality = await scanProjectQuality(input.projectPath, {
         runner: dependencies.commandRunner,
       });
+      reportProgress(dependencies.onProgress, { stepKey: 'project-quality', stepStatus: 'completed' });
     } catch (error) {
       errors.push(toModuleError('project-quality', error));
+      reportProgress(dependencies.onProgress, { stepKey: 'project-quality', stepStatus: 'failed' });
     }
   }
 
   let memory: MemoryEvidence | undefined;
   if (input.enableMemory) {
+    reportProgress(dependencies.onProgress, { stepKey: 'memory', stepStatus: 'running' });
     try {
       memory = await scanMemory(
         {
@@ -195,8 +226,13 @@ export async function runScan(rawInput: unknown, dependencies: RunScanDependenci
         },
         dependencies.memoryDriver,
       );
+      reportProgress(dependencies.onProgress, {
+        stepKey: 'memory',
+        stepStatus: memory?.status === 'error' ? 'failed' : 'completed',
+      });
     } catch (error) {
       errors.push(toModuleError('memory', error));
+      reportProgress(dependencies.onProgress, { stepKey: 'memory', stepStatus: 'failed' });
     }
   }
 
@@ -217,9 +253,11 @@ export async function runScan(rawInput: unknown, dependencies: RunScanDependenci
   };
 
   if (input.enableAi) {
+    reportProgress(dependencies.onProgress, { stepKey: 'ai-diagnosis', stepStatus: 'running' });
     const aiRun = await runAiDiagnosis({
       evidence: compactEvidence(result),
       configPath: dependencies.configPath,
+      projectPath: input.projectPath,
       aiProvider: dependencies.aiProvider,
       aiConfigOverride: input.ai
         ? {
@@ -237,10 +275,16 @@ export async function runScan(rawInput: unknown, dependencies: RunScanDependenci
     } else if (aiRun.meta.error) {
       result.errors.push(toModuleError('ai', new Error(aiRun.meta.error)));
     }
+    reportProgress(dependencies.onProgress, {
+      stepKey: 'ai-diagnosis',
+      stepStatus: aiRun.meta.status === 'success' ? 'completed' : 'failed',
+      stepDetail: aiRun.meta.error,
+    });
   }
 
   result.input = redactScanInput(result.input);
 
+  reportProgress(dependencies.onProgress, { stepKey: 'report', stepStatus: 'running' });
   const plannedPaths = {
     scanDir,
     scanJsonPath: join(scanDir, 'scan.json'),
@@ -265,6 +309,8 @@ export async function runScan(rawInput: unknown, dependencies: RunScanDependenci
     result.errors.push(toModuleError('history', error));
     written = writeReport(result, outputDir);
   }
+
+  reportProgress(dependencies.onProgress, { stepKey: 'report', stepStatus: 'completed' });
 
   return {
     result,

@@ -107,6 +107,9 @@ Current key gaps:
   - evidence ids
   - possible cause
   - suggestion
+  - optimization direction
+  - implementation steps
+  - optional code hints
   - verify method
 - [ ] If AI is unavailable, show “AI 诊断未生成” and keep raw evidence sections.
 - [ ] Test Markdown content with string assertions.

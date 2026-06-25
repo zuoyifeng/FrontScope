@@ -35,9 +35,35 @@ function mockFetch(handlers: {
   authProfiles?: typeof mockAuthProfiles;
   onScan?: (body: unknown) => void;
   onCreateProfile?: (body: unknown) => unknown;
+  onAiTest?: (body: unknown) => void;
+  onScanProgress?: (progressId: string) => void;
+  aiTestResult?: {
+    success: boolean;
+    provider: string;
+    apiKeyConfigured: boolean;
+    durationMs: number;
+    error?: string;
+    responsePreview?: string;
+    model?: string;
+    endpoint?: string;
+  };
+  scanProgress?: {
+    status: 'running' | 'completed' | 'failed';
+    percent: number;
+    currentStepLabel?: string;
+    steps: Array<{ key: string; label: string; status: string; detail?: string }>;
+    result?: {
+      result: Record<string, unknown>;
+      scanDir: string;
+      scanJsonPath: string;
+      reportMarkdownPath: string;
+    };
+    error?: string;
+  };
   createProfileFails?: boolean;
 }) {
   const profileList = [...(handlers.authProfiles?.profiles ?? mockAuthProfiles.profiles)];
+  const progressStore = new Map<string, NonNullable<typeof handlers.scanProgress>>();
 
   vi.stubGlobal(
     'fetch',
@@ -79,26 +105,78 @@ function mockFetch(handlers: {
         } as Response;
       }
 
-      if (url.endsWith('/api/scan')) {
+      if (url.endsWith('/api/scan') && init?.method === 'POST') {
         handlers.onScan?.(JSON.parse(String(init?.body)));
+        const progressId = 'progress-test-1';
+        progressStore.set(progressId, handlers.scanProgress ?? {
+          status: 'completed',
+          percent: 100,
+          currentStepLabel: '生成报告',
+          steps: [
+            { key: 'page-session', label: '页面会话采集', status: 'completed' },
+            { key: 'report', label: '生成报告', status: 'completed' },
+          ],
+          result: {
+            result: {
+              id: 'scan-1',
+              scanMode: 'online',
+              projectEvidenceEnabled: false,
+              errors: [],
+              input: { enableAi: true, url: 'http://localhost:5173' },
+              aiRunMeta: { status: 'success', model: 'gpt-4o-mini', durationMs: 100, issueCount: 0 },
+            },
+            scanDir: '/tmp/scan',
+            scanJsonPath: '/tmp/scan/scan.json',
+            reportMarkdownPath: '/tmp/scan/report.md',
+          },
+        });
+        handlers.onScanProgress?.(progressId);
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: { progressId },
+          }),
+        } as Response;
+      }
+
+      if (url.includes('/api/scan/progress/')) {
+        const progressId = url.split('/').pop() ?? '';
+        const progress = progressStore.get(progressId);
         return {
           ok: true,
           json: async () => ({
             success: true,
             data: {
-              scanDir: '/tmp/scan',
-              scanJsonPath: '/tmp/scan/scan.json',
-              reportMarkdownPath: '/tmp/scan/report.md',
-              result: {
-                id: 'scan-1',
-                scanMode: 'online',
-                projectEvidenceEnabled: false,
-                errors: [],
-                input: { enableAi: true, url: 'http://localhost:5173' },
-                aiRunMeta: { status: 'success', model: 'gpt-4o-mini', durationMs: 100, issueCount: 0 },
-              },
+              progressId,
+              startedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              ...(progress ?? {
+                status: 'failed',
+                percent: 0,
+                steps: [],
+                error: 'progress not found',
+              }),
             },
           }),
+        } as Response;
+      }
+
+      if (url.endsWith('/api/ai/test')) {
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        handlers.onAiTest?.(body);
+        return {
+          ok: true,
+          json: async () =>
+            handlers.aiTestResult ?? {
+              success: true,
+              provider: 'openai',
+              model: 'gpt-4o-mini',
+              endpoint: 'https://api.openai.com/v1/chat/completions',
+              apiKeyConfigured: true,
+              durationMs: 128,
+              responsePreview: '{"ok":true}',
+            },
         } as Response;
       }
 
@@ -133,6 +211,8 @@ describe('App', () => {
     expect(screen.getByText('证据采集模块')).toBeInTheDocument();
     expect(screen.getByText('运行时诊断')).toBeInTheDocument();
     expect(screen.getByText('Network 资源诊断')).toBeInTheDocument();
+    expect(screen.getAllByText('未就绪').length).toBeGreaterThan(0);
+    expect(screen.getByText('未满足')).toBeInTheDocument();
     expect(screen.getByText('生成 AI 诊断')).toBeInTheDocument();
     expect(screen.getByText('本地模式')).toBeInTheDocument();
     expect(screen.getByText('线上模式')).toBeInTheDocument();
@@ -205,6 +285,7 @@ describe('App', () => {
 
     expect(screen.getByPlaceholderText('/absolute/path/to/frontend-project')).toBeInTheDocument();
     expect(screen.queryByText('登录态配置')).not.toBeInTheDocument();
+    expect(screen.getByText('请填写项目路径')).toBeInTheDocument();
   });
 
   it('online mode renders auth profile selector', async () => {
@@ -363,5 +444,30 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByText('profile name is invalid')).toBeInTheDocument();
     });
+  });
+
+  it('runs AI connectivity test and shows success result', async () => {
+    let aiTestBody: unknown;
+    mockFetch({
+      aiStatus: mockAiStatusReady,
+      onAiTest: (body) => {
+        aiTestBody = body;
+      },
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('AI 配置已就绪')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: '测试 AI 接口联通' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('AI 接口联通成功')).toBeInTheDocument();
+      expect(screen.getByText('{"ok":true}')).toBeInTheDocument();
+    });
+
+    expect(aiTestBody).toEqual({});
   });
 });

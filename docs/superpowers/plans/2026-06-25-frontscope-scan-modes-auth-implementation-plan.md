@@ -33,7 +33,10 @@ Current behavior:
 
 - `viewport` exists in `ScanInput` and UI.
 - `projectPath` is optional, but project evidence only runs when it exists.
-- AI config can be supplied through scan input and through project config/env.
+- AI config is resolved via layered `resolveLayeredAiConfig()` (FrontScope install dir + optional `{projectPath}/frontscope.config.json` overlay + env); scan form does not accept credentials.
+- `pnpm dev` starts the web UI and API together via `concurrently`.
+- Async scan progress is exposed at `GET /api/scan/progress/:id`; the UI polls every 500ms.
+- Right-side panels reflect real evidence-module and readiness state (not static placeholders).
 - `saveAuthState` already saves Playwright storage state, but no API/UI flow exposes reusable auth profiles.
 - Runtime evidence already records target URL matching signals.
 - History comparison exists and currently matches primarily by URL and viewport.
@@ -547,7 +550,10 @@ Expected: runtime/report/UI target-match tests pass.
 
 - [ ] Document local mode and online mode separately.
 - [ ] Remove instructions that tell users to enter AI credentials in the scan form.
-- [ ] Document `frontscope.config.json` as the preferred AI config source.
+- [ ] Document `frontscope.config.json` as the preferred AI config source (FrontScope install dir; local scans may overlay `{projectPath}/frontscope.config.json`).
+- [ ] Document `pnpm dev` as the single command to start web UI and API together.
+- [ ] Document AI diagnosis fields: `optimizationDirection`, `implementationSteps`, optional `codeHints`.
+- [ ] Document async scan progress (`POST /api/scan` + `GET /api/scan/progress/:id`) and AI connectivity test (`POST /api/ai/test`).
 - [ ] Document `.frontscope/auth/*.json` as local sensitive auth state.
 - [ ] Add `.frontscope/auth/` to `.gitignore` if the repo has a `.gitignore`.
 - [ ] Document that viewport selection is no longer a main scan input.

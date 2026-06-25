@@ -25,6 +25,7 @@ FrontScope 的目标拆成两个方向：
 先采集证据，再生成结论。
 没有证据，不输出 AI 诊断。
 每条建议必须带验证方法。
+AI 问题除解读证据外，应输出优化策略、实施步骤与可选代码提示，避免空泛复述。
 ```
 
 ## 3. 非目标
@@ -93,7 +94,10 @@ UI 第一层只保留：
 - 本地模式项目路径。
 - 线上模式认证配置文件。
 - AI 诊断开关和配置状态。
+- 「测试 AI 接口联通」与扫描进度面板（轮询 `/api/scan/progress/:id`）。
 - 输出目录和页面名称作为高级选项。
+
+开发启动：`pnpm dev` 同时启动前端（`:5173`）与 API（`:3001`）；`pnpm dev:web` / `pnpm dev:api` 用于单独调试。
 
 移除：
 
@@ -103,13 +107,14 @@ UI 第一层只保留：
 
 ## 7. AI 配置策略
 
-AI 配置属于项目级配置，来源按优先级合并：
+AI 配置属于项目级配置，按分层合并：
 
-1. `frontscope.config.json`
-2. 环境变量
-3. 代码默认值
+1. 显式 `FRONTSCOPE_CONFIG` 或 `configPath`
+2. **FrontScope 安装目录**（运行 `pnpm dev` / `pnpm scan` 时的 cwd）下的 `frontscope.config.json`
+3. **本地模式可选覆盖**：`{projectPath}/frontscope.config.json`（仅覆盖非密钥字段）
+4. 环境变量（`FRONTSCOPE_AI_*`）
 
-扫描入口只展示状态：
+扫描入口只展示状态，并提供 **「测试 AI 接口联通」** 按钮（`POST /api/ai/test`，发送最小 Chat Completions `ping`）：
 
 - 已配置：默认开启 AI 诊断。
 - 未配置：默认关闭，并提示到配置文件中补齐。

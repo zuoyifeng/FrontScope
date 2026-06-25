@@ -223,8 +223,8 @@ export function compactEvidence(result: ScanResult, options: CompactEvidenceOpti
       add({
         id: `quality.codeReview.${index}`,
         category: 'code-quality',
-        summary: `[${finding.ruleId}] ${finding.message}`,
-        detail: `${finding.file}:${finding.line}`,
+        summary: `[${finding.ruleId}] ${finding.file}:${finding.line} ${finding.message}`,
+        detail: `${finding.severity} @ ${finding.file}:${finding.line}`,
       });
     });
   }

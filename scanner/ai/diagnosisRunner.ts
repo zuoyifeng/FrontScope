@@ -61,6 +61,7 @@ function logAiRun(meta: AiRunMeta): void {
 export async function runAiDiagnosis(options: {
   evidence: CompactEvidenceItem[];
   configPath?: string;
+  projectPath?: string;
   aiProvider?: AiProvider;
   aiConfigOverride?: Partial<AiConfig>;
 }): Promise<AiDiagnosisRunResult> {
@@ -104,6 +105,7 @@ export async function runAiDiagnosis(options: {
 
   const config = resolveEffectiveAiConfig({
     configPath: options.configPath,
+    projectPath: options.projectPath,
     override: options.aiConfigOverride,
   });
   const baseMeta = buildMetaFromConfig(config, evidenceCount);
@@ -114,7 +116,7 @@ export async function runAiDiagnosis(options: {
         ...baseMeta,
         status: 'failed',
         error:
-          'AI provider 为 mock。请在扫描表单填写 Base URL / API Key / 模型，或在 frontscope.config.json 配置 openai provider。',
+          'AI provider 为 mock。请在 FrontScope 安装目录的 frontscope.config.json 或环境变量中配置 openai provider 与 API Key；本地模式也可在被扫描项目的 frontscope.config.json 中覆盖。',
       },
     };
   }
@@ -125,7 +127,7 @@ export async function runAiDiagnosis(options: {
         ...baseMeta,
         status: 'failed',
         error:
-          'AI provider 缺少 apiKey。请在扫描表单填写 API Key，或配置 frontscope.config.json / 环境变量。',
+          'AI provider 缺少 apiKey。请在 FrontScope 安装目录的 frontscope.config.json 或环境变量中配置 API Key。',
       },
     };
   }
@@ -135,7 +137,7 @@ export async function runAiDiagnosis(options: {
       meta: {
         ...baseMeta,
         status: 'failed',
-        error: 'AI provider 缺少 model。请在扫描表单填写模型，例如 mimo-v2.5-pro。',
+        error: 'AI provider 缺少 model。请在 frontscope.config.json 或环境变量中配置模型，例如 mimo-v2.5-pro。',
       },
     };
   }

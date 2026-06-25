@@ -94,7 +94,12 @@ AI then produces:
 - Evidence for each issue.
 - Likely cause.
 - Repair suggestion.
+- **Optimization strategy** (goals, approach, expected benefit, caveats).
+- **Implementation steps** (2–8 actionable items, preferably file/config/command specific).
+- **Code or config hints** (optional pseudo-code, snippets, or refactor examples).
 - Verification method.
+
+AI diagnosis must go beyond restating the report: each issue should include concrete code-level or optimization guidance grounded in collected evidence.
 
 ### Explicit Non-Goals For V0.x
 
@@ -175,7 +180,9 @@ These Playwright `storageState` files contain cookies and localStorage. They mus
 
 ### R1c. AI Configuration
 
-Preferred source: `frontscope.config.json` at the project root (or path from `FRONTSCOPE_CONFIG`).
+Preferred source: `frontscope.config.json` in the **FrontScope install directory** (the cwd when running `pnpm dev` / `pnpm scan`), or an explicit path from `FRONTSCOPE_CONFIG`.
+
+When scanning in **local mode**, an optional overlay at `{projectPath}/frontscope.config.json` may override non-secret AI fields (model, base URL, etc.). Secrets should remain in environment variables.
 
 Example:
 
@@ -190,6 +197,8 @@ Example:
 ```
 
 Set `FRONTSCOPE_AI_API_KEY` in the environment, or reference it in the config via `${FRONTSCOPE_AI_API_KEY}` interpolation.
+
+The scan UI exposes AI config **status** and a **connectivity test** (`POST /api/ai/test`) that sends a minimal Chat Completions `ping` against the resolved provider — not just whether a config file exists.
 
 ### R2. Runtime Evidence
 
@@ -251,10 +260,13 @@ Output schema:
     {
       "title": "string",
       "severity": "high | medium | low",
-      "category": "runtime | performance | network | dependency | code-quality | project",
-      "evidence": ["string"],
+      "category": "runtime | performance | network | memory | dependency | code-quality | project",
+      "evidenceIds": ["string"],
       "possibleCause": "string",
       "suggestion": "string",
+      "optimizationDirection": "string",
+      "implementationSteps": ["string"],
+      "codeHints": "string (optional)",
       "verifyMethod": "string"
     }
   ],
@@ -264,7 +276,9 @@ Output schema:
 
 Guardrail:
 
+- Every issue must reference at least one collected `evidenceId`; unknown ids are rejected.
 - If the AI mentions a file, metric, dependency, or error, it must appear in evidence.
+- `optimizationDirection` and `implementationSteps` must be actionable — not a restatement of the evidence summary.
 - If evidence is insufficient, the AI should say what extra evidence is needed.
 
 ### R7. Report Output
@@ -273,10 +287,11 @@ Each scan creates:
 
 ```text
 reports/<scan-id>/scan.json
-reports/<scan-id>/ai-diagnosis.json
 reports/<scan-id>/report.md
 reports/<scan-id>/screenshot.png
 ```
+
+`<scan-id>` uses local time `YYYY-MM-DD_HH-mm-ss` plus an optional page-name slug, for example `2026-06-23_18-30-45-shou-ye`.
 
 The Markdown report includes:
 
@@ -284,7 +299,7 @@ The Markdown report includes:
 - Health summary.
 - Key metrics.
 - Runtime errors.
-- Top AI issues.
+- Top AI issues (summary, cause, suggestion, optimization strategy, implementation steps, optional code hints, verification).
 - Raw evidence appendix.
 
 ## 7. Product Iterations
@@ -325,7 +340,7 @@ Features:
 
 Success criteria:
 
-- Report includes top issues with evidence, cause, suggestion, and verification method.
+- Report includes top issues with evidence, cause, suggestion, optimization strategy, implementation steps, optional code hints, and verification method.
 - AI output can be parsed reliably.
 
 ### V0.3 Web UI
@@ -337,14 +352,20 @@ Make the tool usable without command-line knowledge.
 Features:
 
 - Scan form.
-- Scan progress.
+- Single `pnpm dev` command starts the web UI (`:5173`) and API (`:3001`) together; `pnpm dev:web` / `pnpm dev:api` remain for isolated debugging.
+- Scan progress with step-level status polled from `/api/scan/progress/:id` (page session, Lighthouse, project quality, memory, AI, report).
 - Report detail page.
 - Screenshot preview.
 - Markdown export.
+- Right-side workspace panels that reflect real scan state:
+  - Evidence modules show pending / scanning / collected / skipped / failed based on scan mode, form options, and `scan.json` module results.
+  - Readiness panel runs pre-scan checks (URL, API, project path, AI config) and post-scan evidence completion stats.
+- AI connectivity test button sends a minimal Chat Completions `ping` request against the resolved config.
 
 Success criteria:
 
 - A user can start a scan and read a report from the browser UI.
+- The user can tell before scanning whether prerequisites are satisfied, and after scanning which evidence modules succeeded or failed.
 
 ### V0.4 Performance Trace Diagnosis
 
@@ -441,8 +462,9 @@ Mitigation:
 Mitigation:
 
 - Use structured evidence.
-- Require every issue to cite evidence.
-- Add schema validation.
+- Require every issue to cite evidence ids.
+- Require optimization strategy, implementation steps, and optional code hints — not generic restatements.
+- Add schema validation (Zod).
 - Prefer top 3-5 issues instead of a long generic list.
 
 ### Risk 3: Lighthouse results are noisy

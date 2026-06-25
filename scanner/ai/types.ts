@@ -22,7 +22,14 @@ export interface AiIssue {
   category: AiIssueCategory;
   evidenceIds: string[];
   possibleCause: string;
+  /** 一句话修复方向，面向工程师快速扫读 */
   suggestion: string;
+  /** 优化策略：说明为什么要这么改、预期收益与取舍 */
+  optimizationDirection: string;
+  /** 可落地的实施步骤，按执行顺序排列 */
+  implementationSteps: string[];
+  /** 代码/配置层面的提示；仅当证据中出现文件、规则、URL 等可引用信息时填写 */
+  codeHints?: string;
   verifyMethod: string;
 }
 

@@ -1,4 +1,4 @@
-import { join, resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import {
@@ -9,12 +9,20 @@ import {
 } from '../scanner/auth/authProfile.js';
 import { saveAuthState } from '../scanner/auth/saveAuthState.js';
 import {
-  DEFAULT_CONFIG_FILENAME,
   resolveAiConfig,
   resolveSecurityConfig,
   describeAiConfig,
 } from '../scanner/ai/config.js';
+import { runAiConnectionTest } from '../scanner/ai/testAiConnection.js';
 import { runScan } from '../scanner/scan/runScan.js';
+import { validateInput } from '../scanner/scan/validateInput.js';
+import {
+  completeScanProgress,
+  failScanProgress,
+  getScanProgress,
+  initScanProgress,
+  updateScanProgress,
+} from './scanProgressStore.js';
 
 export const INTERACTIVE_AUTH_PROFILE_FLOW = 'interactive-playwright' as const;
 export const INTERACTIVE_AUTH_PROFILE_MESSAGE =
@@ -113,43 +121,26 @@ app.use('/api/scan', async (c, next) => {
 app.post('/api/scan', async (c) => {
   try {
     const body = await c.req.json();
-    const {
-      scanMode,
-      projectPath,
-      url,
-      viewport,
-      pageName,
-      outputDir,
-      authStatePath,
-      enableAi,
-      enableMemory,
-      memoryReloadRounds,
-      ai,
-    } = body;
+    const input = validateInput(body);
+    const progressId = randomUUID();
+    initScanProgress(progressId, input);
 
-    const resolvedProjectPath = projectPath ? resolve(projectPath) : undefined;
-    const configPath = resolvedProjectPath ? join(resolvedProjectPath, DEFAULT_CONFIG_FILENAME) : undefined;
-
-    const result = await runScan(
-      {
-        scanMode,
-        projectPath,
-        url,
-        viewport: viewport || 'desktop',
-        pageName,
-        outputDir,
-        authStatePath,
-        enableAi,
-        enableMemory,
-        memoryReloadRounds,
-        ai,
+    void runScan(body, {
+      security,
+      onProgress: (update) => {
+        updateScanProgress(progressId, update);
       },
-      { security, configPath },
-    );
+    })
+      .then((result) => {
+        completeScanProgress(progressId, result);
+      })
+      .catch((error) => {
+        failScanProgress(progressId, error instanceof Error ? error.message : 'Unknown error');
+      });
 
     return c.json({
       success: true,
-      data: result,
+      data: { progressId },
     });
   } catch (error) {
     return c.json(
@@ -160,6 +151,29 @@ app.post('/api/scan', async (c) => {
       400,
     );
   }
+});
+
+app.get('/api/scan/progress/:progressId', (c) => {
+  const progress = getScanProgress(c.req.param('progressId'));
+  if (!progress) {
+    return c.json({ success: false, error: '扫描进度不存在或已过期' }, 404);
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      progressId: progress.progressId,
+      status: progress.status,
+      percent: progress.percent,
+      currentStepKey: progress.currentStepKey,
+      currentStepLabel: progress.currentStepLabel,
+      steps: progress.steps,
+      startedAt: progress.startedAt,
+      updatedAt: progress.updatedAt,
+      error: progress.error,
+      result: progress.result,
+    },
+  });
 });
 
 app.get('/api/health', (c) => {
@@ -178,6 +192,26 @@ app.get('/api/ai/status', (c) => {
     apiKeyConfigured: described.apiKeyConfigured,
     ready: described.provider === 'openai' && described.apiKeyConfigured && Boolean(described.model),
   });
+});
+
+app.post('/api/ai/test', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const projectPath = typeof body?.projectPath === 'string' ? body.projectPath : undefined;
+    const result = await runAiConnectionTest({ projectPath });
+    return c.json(result);
+  } catch (error) {
+    return c.json(
+      {
+        success: false,
+        provider: 'unknown',
+        apiKeyConfigured: false,
+        durationMs: 0,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      },
+      500,
+    );
+  }
 });
 
 app.get('/api/auth-profiles', (c) => {

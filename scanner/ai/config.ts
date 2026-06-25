@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { z } from 'zod';
 
 export const DEFAULT_CONFIG_FILENAME = 'frontscope.config.json';
@@ -165,9 +165,62 @@ export function mergeAiConfig(base: AiConfig, override?: Partial<AiConfig>): AiC
   };
 }
 
+function fileAiToPartialConfig(
+  fileConfig: NonNullable<FrontscopeConfigFile['ai']>,
+  env: Record<string, string | undefined>,
+): Partial<AiConfig> {
+  return pickDefined({
+    provider: fileConfig.provider,
+    baseURL: fileConfig.baseURL,
+    apiKey: interpolateEnv(fileConfig.apiKey, env) ?? fileConfig.apiKey,
+    authHeader: fileConfig.authHeader,
+    model: fileConfig.model,
+    temperature: fileConfig.temperature,
+    maxOutputTokens: fileConfig.maxOutputTokens,
+    timeoutMs: fileConfig.timeoutMs,
+  });
+}
+
+/**
+ * Resolve AI config for a scan.
+ *
+ * Precedence:
+ * 1. Explicit `configPath` / `FRONTSCOPE_CONFIG`
+ * 2. Tool install config (`cwd` / process cwd)
+ * 3. Optional project overlay at `{projectPath}/frontscope.config.json`
+ * 4. Environment variables (applied inside each `resolveAiConfig` call)
+ */
+export function resolveLayeredAiConfig(
+  options: { configPath?: string; projectPath?: string; cwd?: string; env?: Record<string, string | undefined> } = {},
+): AiConfig {
+  const env = options.env ?? process.env;
+
+  if (options.configPath || env.FRONTSCOPE_CONFIG) {
+    return resolveAiConfig({ configPath: options.configPath, cwd: options.cwd, env });
+  }
+
+  const toolConfig = resolveAiConfig({ cwd: options.cwd, env });
+
+  if (!options.projectPath) {
+    return toolConfig;
+  }
+
+  const projectConfigPath = join(resolve(options.projectPath), DEFAULT_CONFIG_FILENAME);
+  if (!existsSync(projectConfigPath)) {
+    return toolConfig;
+  }
+
+  const projectAi = readConfigFile(projectConfigPath).ai;
+  if (!projectAi) {
+    return toolConfig;
+  }
+
+  return mergeAiConfig(toolConfig, fileAiToPartialConfig(projectAi, env));
+}
+
 /** Build effective AI config: per-scan form values win over file/env. */
 export function resolveEffectiveAiConfig(
-  options: { configPath?: string; override?: Partial<AiConfig> } = {},
+  options: { configPath?: string; projectPath?: string; override?: Partial<AiConfig> } = {},
 ): AiConfig {
   const override = options.override ? pickDefined(options.override) : undefined;
 
@@ -177,14 +230,17 @@ export function resolveEffectiveAiConfig(
         provider: 'openai',
         authHeader: (override.authHeader as AiAuthHeader | undefined) ?? 'api-key',
         temperature: 0.2,
-        maxOutputTokens: 2000,
+        maxOutputTokens: 4096,
         timeoutMs: 60_000,
       },
       { provider: 'openai', ...override },
     );
   }
 
-  return mergeAiConfig(resolveAiConfig({ configPath: options.configPath }), override);
+  return mergeAiConfig(
+    resolveLayeredAiConfig({ configPath: options.configPath, projectPath: options.projectPath }),
+    override,
+  );
 }
 
 export interface AiConfigDescription {

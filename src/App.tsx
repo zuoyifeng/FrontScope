@@ -20,28 +20,35 @@ import {
 } from 'antd';
 import {
   ApiOutlined,
+  ArrowLeftOutlined,
   BugOutlined,
   DashboardOutlined,
   FileSearchOutlined,
   PlusOutlined,
+  RobotOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { ScanModule, ScanMode } from './features/scans/types';
+import type { EvidenceModuleKey, ScanMode } from './features/scans/types';
 import type { ScanResponse } from './features/scans/types';
-import { initialModules, reportPreview } from './features/scans/sampleData';
+import { EVIDENCE_MODULE_STATUS_META, buildEvidenceModules } from './features/scans/evidenceModules';
+import { buildScanReadiness } from './features/scans/scanReadiness';
+import { ScanProgressPanel } from './features/scans/ScanProgressPanel';
+import type { ScanProgressApiResponse, ScanProgressView, ScanStartResponse } from './features/scans/scanProgressTypes';
 import { ScanResultView } from './features/scans/ScanResultView';
 
 const { Header, Content, Sider } = Layout;
 const { Title, Text, Paragraph } = Typography;
 const API_BASE_URL = import.meta.env.VITE_FRONTSCOPE_API_BASE_URL ?? 'http://localhost:3001';
 
-const moduleIcon: Record<ScanModule['key'], ReactNode> = {
+const moduleIcon: Record<EvidenceModuleKey, ReactNode> = {
   runtime: <BugOutlined />,
   performance: <ThunderboltOutlined />,
   network: <ApiOutlined />,
-  package: <FileSearchOutlined />,
+  project: <FileSearchOutlined />,
+  memory: <DashboardOutlined />,
+  ai: <RobotOutlined />,
 };
 
 interface AiStatus {
@@ -52,6 +59,19 @@ interface AiStatus {
   authHeader: string;
   apiKeyConfigured: boolean;
   ready: boolean;
+}
+
+interface AiConnectionTestResult {
+  success: boolean;
+  provider: string;
+  model?: string;
+  baseURL?: string;
+  endpoint?: string;
+  authHeader?: string;
+  apiKeyConfigured: boolean;
+  durationMs: number;
+  error?: string;
+  responsePreview?: string;
 }
 
 interface AuthProfile {
@@ -74,11 +94,17 @@ function ScanWorkspace() {
   const { message, notification } = AntApp.useApp();
   const [form] = Form.useForm<ScanFormValues>();
   const enableMemory = Form.useWatch('enableMemory', form);
+  const enableAi = Form.useWatch('enableAi', form);
+  const url = Form.useWatch('url', form) ?? '';
+  const projectPath = Form.useWatch('projectPath', form) ?? '';
   const [scanMode, setScanMode] = useState<ScanMode>('online');
   const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<ScanProgressView | null>(null);
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
   const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [aiStatusLoading, setAiStatusLoading] = useState(true);
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiConnectionTest, setAiConnectionTest] = useState<AiConnectionTestResult | null>(null);
   const [authProfiles, setAuthProfiles] = useState<AuthProfile[]>([]);
   const [authProfilesLoading, setAuthProfilesLoading] = useState(false);
   const [creatingProfile, setCreatingProfile] = useState(false);
@@ -134,9 +160,72 @@ function ScanWorkspace() {
     }
   }, [scanMode, loadAuthProfiles]);
 
-  const readiness = scanResult?.success
-    ? scanResult.data?.result.lighthouse?.scores.performance ?? reportPreview.readiness
-    : reportPreview.readiness;
+  const apiReachable = !aiStatusLoading && aiStatus !== null;
+  const workspaceInput = useMemo(
+    () => ({
+      scanMode,
+      url,
+      projectPath,
+      enableMemory: Boolean(enableMemory),
+      enableAi: Boolean(enableAi),
+      aiReady: Boolean(aiStatus?.ready),
+      aiStatusLoading,
+      apiReachable,
+      scanning,
+      scanResult: scanResult?.success ? scanResult.data?.result ?? null : null,
+      scanProgress,
+    }),
+    [
+      aiStatus?.ready,
+      aiStatusLoading,
+      apiReachable,
+      enableAi,
+      enableMemory,
+      projectPath,
+      scanMode,
+      scanProgress,
+      scanResult,
+      scanning,
+      url,
+    ],
+  );
+  const evidenceModules = useMemo(() => buildEvidenceModules(workspaceInput), [workspaceInput]);
+  const scanReadiness = useMemo(() => buildScanReadiness(workspaceInput), [workspaceInput]);
+
+  const handleTestAiConnection = async () => {
+    setAiTesting(true);
+    setAiConnectionTest(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/ai/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectPath: scanMode === 'local' ? projectPath.trim() || undefined : undefined,
+        }),
+      });
+      const result: AiConnectionTestResult = await response.json();
+      setAiConnectionTest(result);
+
+      if (result.success) {
+        message.success(`AI 接口联通成功（${result.durationMs}ms）`);
+      } else {
+        message.error(result.error ?? 'AI 接口联通失败');
+      }
+    } catch {
+      const fallback: AiConnectionTestResult = {
+        success: false,
+        provider: aiStatus?.provider ?? 'unknown',
+        apiKeyConfigured: Boolean(aiStatus?.apiKeyConfigured),
+        durationMs: 0,
+        error: '无法连接到 API 服务，请确认 pnpm dev 或 pnpm dev:api 已启动',
+      };
+      setAiConnectionTest(fallback);
+      message.error(fallback.error);
+    } finally {
+      setAiTesting(false);
+    }
+  };
 
   const handleCreateProfile = async () => {
     const profileName = newProfileName.trim();
@@ -181,6 +270,7 @@ function ScanWorkspace() {
   const handleScan = async (values: ScanFormValues) => {
     setScanning(true);
     setScanResult(null);
+    setScanProgress(null);
 
     const payload = {
       scanMode,
@@ -194,18 +284,53 @@ function ScanWorkspace() {
       memoryReloadRounds: values.memoryReloadRounds,
     };
 
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
     try {
-      const response = await fetch(`${API_BASE_URL}/api/scan`, {
+      const startResponse = await fetch(`${API_BASE_URL}/api/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+      const started: ScanStartResponse = await startResponse.json();
 
-      const result: ScanResponse = await response.json();
-      setScanResult(result);
+      if (!startResponse.ok || !started.success || !started.data?.progressId) {
+        setScanResult({ success: false, error: started.error ?? '扫描启动失败' });
+        message.error(started.error ?? '扫描启动失败');
+        return;
+      }
 
-      if (result.success) {
-        const data = result.data;
+      const progressId = started.data.progressId;
+      let finalResult: ScanResponse | null = null;
+
+      while (!finalResult) {
+        const progressResponse = await fetch(`${API_BASE_URL}/api/scan/progress/${progressId}`);
+        const progressPayload: ScanProgressApiResponse = await progressResponse.json();
+
+        if (!progressResponse.ok || !progressPayload.success || !progressPayload.data) {
+          finalResult = { success: false, error: progressPayload.error ?? '无法获取扫描进度' };
+          break;
+        }
+
+        setScanProgress(progressPayload.data);
+
+        if (progressPayload.data.status === 'completed' && progressPayload.data.result) {
+          finalResult = { success: true, data: progressPayload.data.result };
+          break;
+        }
+
+        if (progressPayload.data.status === 'failed') {
+          finalResult = { success: false, error: progressPayload.data.error ?? '扫描失败' };
+          break;
+        }
+
+        await wait(500);
+      }
+
+      setScanResult(finalResult);
+
+      if (finalResult?.success) {
+        const data = finalResult.data;
         if (data) {
           const aiMeta = data.result.aiRunMeta;
           const aiOk = aiMeta?.status === 'success';
@@ -234,13 +359,13 @@ function ScanWorkspace() {
             duration: 12,
           });
           requestAnimationFrame(() => {
-            resultRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+            window.scrollTo({ top: 0, behavior: 'smooth' });
           });
         } else {
           message.success('扫描完成！');
         }
-      } else {
-        message.error(`扫描失败: ${result.error}`);
+      } else if (finalResult) {
+        message.error(`扫描失败: ${finalResult.error}`);
       }
     } catch {
       message.error('无法连接到扫描服务，请确保 API 服务已启动');
@@ -249,6 +374,14 @@ function ScanWorkspace() {
       setScanning(false);
     }
   };
+
+  const handleNewScan = () => {
+    setScanResult(null);
+    setScanProgress(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const hasReport = Boolean(scanResult?.success && scanResult.data);
 
   return (
     <Layout className="app-shell">
@@ -262,25 +395,63 @@ function ScanWorkspace() {
         </div>
 
         <Space direction="vertical" size={12} className="nav-stack">
-          <Button type="primary" block icon={<DashboardOutlined />}>
-            新建扫描
+          <Button
+            type="primary"
+            block
+            icon={<DashboardOutlined />}
+            onClick={hasReport ? handleNewScan : undefined}
+          >
+            {hasReport ? '新建扫描' : '新建扫描'}
           </Button>
-          <Button block icon={<FileSearchOutlined />}>
+          <Button block icon={<FileSearchOutlined />} disabled={!hasReport}>
             体检报告
           </Button>
         </Space>
       </Sider>
 
       <Layout>
-        <Header className="app-header">
+        <Header className={`app-header${hasReport ? ' app-header--compact' : ''}`}>
           <div>
-            <Text className="eyebrow">性能 · 网络 · 内存 · 代码质量</Text>
-            <Title level={2}>前端证据体检工作台</Title>
+            <Text className="eyebrow">
+              {hasReport ? '体检报告' : '性能 · 网络 · 内存 · 代码质量'}
+            </Text>
+            <Title level={hasReport ? 3 : 2}>
+              {hasReport ? '扫描结果已就绪' : '前端证据体检工作台'}
+            </Title>
           </div>
-          <Tag color="blue">本地优先</Tag>
+          {!hasReport && <Tag color="blue">本地优先</Tag>}
         </Header>
 
-        <Content className="app-content">
+        <Content className={`app-content${hasReport ? ' app-content--report' : ''}`}>
+          {hasReport && scanResult?.data ? (
+            <>
+              <div className="report-toolbar">
+                <Space wrap>
+                  <Button icon={<ArrowLeftOutlined />} onClick={handleNewScan}>
+                    返回扫描配置
+                  </Button>
+                  <div className="report-toolbar-meta">
+                    <Text strong>{scanResult.data.result.id}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      {scanResult.data.result.input.url}
+                    </Text>
+                  </div>
+                </Space>
+                <Button
+                  type="primary"
+                  onClick={() => void navigator.clipboard.writeText(scanResult.data!.reportMarkdownPath)}
+                >
+                  复制 Markdown 路径
+                </Button>
+              </div>
+              <ScanResultView
+                result={scanResult.data.result}
+                scanDir={scanResult.data.scanDir}
+                scanJsonPath={scanResult.data.scanJsonPath}
+                reportMarkdownPath={scanResult.data.reportMarkdownPath}
+              />
+            </>
+          ) : (
           <Row gutter={[20, 20]}>
             <Col xs={24} xl={10}>
               <Card title="开始扫描" className="panel">
@@ -472,6 +643,44 @@ function ScanWorkspace() {
                     />
                   )}
 
+                  <Button
+                    block
+                    loading={aiTesting}
+                    disabled={aiStatusLoading}
+                    onClick={() => void handleTestAiConnection()}
+                    style={{ marginBottom: 16 }}
+                  >
+                    {aiTesting ? '正在测试 AI 接口…' : '测试 AI 接口联通'}
+                  </Button>
+
+                  {aiConnectionTest && (
+                    <Alert
+                      type={aiConnectionTest.success ? 'success' : 'error'}
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                      message={aiConnectionTest.success ? 'AI 接口联通成功' : 'AI 接口联通失败'}
+                      description={
+                        <div>
+                          <div>Provider：{aiConnectionTest.provider}</div>
+                          <div>模型：{aiConnectionTest.model ?? '未配置'}</div>
+                          <div>Endpoint：{aiConnectionTest.endpoint ?? aiConnectionTest.baseURL ?? '未配置'}</div>
+                          {aiConnectionTest.success ? (
+                            <>
+                              <div>耗时：{aiConnectionTest.durationMs}ms</div>
+                              {aiConnectionTest.responsePreview && (
+                                <div style={{ marginTop: 8 }}>
+                                  响应预览：<Text code>{aiConnectionTest.responsePreview}</Text>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div style={{ marginTop: 8 }}>{aiConnectionTest.error}</div>
+                          )}
+                        </div>
+                      }
+                    />
+                  )}
+
                   <Form.Item
                     label="内存诊断"
                     name="enableMemory"
@@ -510,49 +719,94 @@ function ScanWorkspace() {
             </Col>
 
             <Col xs={24} xl={14}>
+              {scanProgress && (
+                <Card title="扫描进度" className="panel" style={{ marginBottom: 20 }}>
+                  <ScanProgressPanel progress={scanProgress} />
+                </Card>
+              )}
+
               <Card title="证据采集模块" className="panel" style={{ marginBottom: 20 }}>
                 <Row gutter={[16, 16]}>
-                  {initialModules.map((item) => (
-                    <Col xs={24} md={12} key={item.key}>
-                      <div className="module-card">
-                        <div className="module-icon">{moduleIcon[item.key]}</div>
-                        <div>
-                          <Text strong>{item.title}</Text>
-                          <Paragraph className="module-description">{item.description}</Paragraph>
-                          <Tag color="green">{item.status}</Tag>
+                  {evidenceModules.map((item) => {
+                    const statusMeta = EVIDENCE_MODULE_STATUS_META[item.status];
+                    return (
+                      <Col xs={24} md={12} key={item.key}>
+                        <div className="module-card">
+                          <div className="module-icon">{moduleIcon[item.key]}</div>
+                          <div>
+                            <Text strong>{item.title}</Text>
+                            <Paragraph className="module-description">{item.description}</Paragraph>
+                            <Tag color={statusMeta.color}>{statusMeta.label}</Tag>
+                            {item.statusDetail && (
+                              <Paragraph type="secondary" className="module-description" style={{ marginTop: 8 }}>
+                                {item.statusDetail}
+                              </Paragraph>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </Col>
-                  ))}
+                      </Col>
+                    );
+                  })}
                 </Row>
               </Card>
 
               <Card title="体检就绪度" className="panel">
                 <Space direction="vertical" size={12} className="full-width">
-                  <Progress percent={readiness} status="active" />
-                  <Text type="secondary">
-                    覆盖运行时、性能、网络、内存与本地代码质量证据，全部进入 JSON 与 Markdown 报告，并可由 AI
-                    基于证据生成修复建议。
-                  </Text>
+                  <Progress
+                    percent={scanReadiness.percent}
+                    status={
+                      scanReadiness.phase === 'scanning'
+                        ? 'active'
+                        : scanReadiness.percent === 100
+                          ? 'success'
+                          : scanReadiness.phase === 'post' && scanReadiness.percent === 0
+                            ? 'exception'
+                            : 'normal'
+                    }
+                  />
+                  <Text type="secondary">{scanReadiness.summary}</Text>
+                  <Space direction="vertical" size={8} className="full-width">
+                    {scanReadiness.checks.map((check) => (
+                      <div key={check.key} className="readiness-check">
+                        <Tag
+                          color={
+                            check.status === 'pass'
+                              ? 'success'
+                              : check.status === 'fail'
+                                ? 'error'
+                                : check.status === 'pending'
+                                  ? 'processing'
+                                  : 'default'
+                          }
+                        >
+                          {check.status === 'pass'
+                            ? '通过'
+                            : check.status === 'fail'
+                              ? '未满足'
+                              : check.status === 'pending'
+                                ? '进行中'
+                                : '跳过'}
+                        </Tag>
+                        <Text>{check.label}</Text>
+                        {check.detail && (
+                          <Text type="secondary" style={{ marginLeft: 8 }}>
+                            {check.detail}
+                          </Text>
+                        )}
+                      </div>
+                    ))}
+                  </Space>
                 </Space>
               </Card>
             </Col>
 
-            {scanResult && (
+            {scanResult && !scanResult.success && (
               <Col xs={24} ref={resultRef}>
-                {scanResult.success && scanResult.data ? (
-                  <ScanResultView
-                    result={scanResult.data.result}
-                    scanDir={scanResult.data.scanDir}
-                    scanJsonPath={scanResult.data.scanJsonPath}
-                    reportMarkdownPath={scanResult.data.reportMarkdownPath}
-                  />
-                ) : (
-                  <Alert type="error" showIcon message="扫描失败" description={scanResult.error} />
-                )}
+                <Alert type="error" showIcon message="扫描失败" description={scanResult.error} />
               </Col>
             )}
           </Row>
+          )}
         </Content>
       </Layout>
     </Layout>

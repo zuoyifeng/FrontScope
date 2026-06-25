@@ -104,7 +104,7 @@ FrontScope 用于批量采集、归档、对比、解释和生成修复建议
 ## 推荐迭代顺序
 
 1. V0.1 修稳：部分失败报告、Markdown 报告、Lighthouse details、文档和测试。
-2. V0.2 AI 报告：只基于证据输出 top issues、原因、建议、验证方法。
+2. V0.2 AI 报告：只基于证据输出 top issues、原因、修复方向、优化策略、实施步骤、可选代码提示、验证方法。
 3. V0.3 Network 深化：瀑布图数据、缓存命中率、慢请求和大资源。
 4. V0.4 Performance Trace：long task、layout shift、主线程耗时摘要，附 trace 文件。
 5. V0.5 Project Quality And Local Code Review：typecheck、lint、依赖风险、无用依赖、循环依赖、本地代码逻辑与交互实现审查。

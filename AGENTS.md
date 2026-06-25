@@ -7,8 +7,9 @@ FrontScope is a local-first React, Vite, and TypeScript app with a Node API and 
 ## Build, Test, and Development Commands
 
 - `pnpm install`: install dependencies.
-- `pnpm dev`: start the Vite frontend on `http://localhost:5173`.
-- `pnpm dev:api`: start the Hono API on `http://localhost:3001`.
+- `pnpm dev`: start the Vite frontend (`http://localhost:5173`) and Hono API (`http://localhost:3001`) together.
+- `pnpm dev:web`: start only the Vite frontend.
+- `pnpm dev:api`: start only the Hono API.
 - `pnpm scan --url http://localhost:5173`: run the scanner CLI; add `--project /path/to/project`, `--ai`, `--mock-ai`, or `--memory` as needed.
 - `pnpm test`: run Vitest once.
 - `pnpm test:watch`: run Vitest in watch mode.

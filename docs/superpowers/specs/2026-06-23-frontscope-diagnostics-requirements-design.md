@@ -204,15 +204,16 @@ FrontScope 不做全量 DevTools 克隆，也不做云监控平台。
 证据是什么？
 可能原因是什么？
 怎么修？
+具体怎么优化、改哪段代码或配置？
 修完怎么验证？
 ```
 
 模块：
 
-- Evidence Compactor
+- Evidence Compactor（code-review 证据 summary 含 `file:line`，便于模型定位）
 - AI Analyzer
-- Schema Validator
-- Evidence Guardrail
+- Schema Validator（含 `optimizationDirection`、`implementationSteps`、`codeHints`）
+- Evidence Guardrail（`evidenceIds` 必须存在于压缩证据中）
 - Markdown Report Generator
 
 ## 5. 版本范围
@@ -225,12 +226,13 @@ FrontScope 不做全量 DevTools 克隆，也不做云监控平台。
 
 需求：
 
-- 支持配置 AI provider。
+- 支持配置 AI provider（FrontScope 安装目录 `frontscope.config.json` + 环境变量；本地扫描可选项目目录覆盖）。
 - 构造紧凑 evidence payload。
 - AI 输出结构化 JSON。
 - 用 Zod 校验 AI 输出。
-- 每条 issue 必须引用 evidence id。
-- 报告包含 summary、health level、top issues、evidence、possible cause、suggestion、verify method。
+- 每条 issue 必须引用 `evidenceIds`，且 id 必须存在于压缩证据中。
+- 每条 issue 除 `suggestion`、`verifyMethod` 外，还必须包含可执行的 `optimizationDirection`（优化策略）与 `implementationSteps`（2–8 条实施步骤）；可选 `codeHints`（代码/配置片段）。
+- 报告与 UI 按问题分节展示上述字段；禁止空泛复述证据原文。
 - AI 失败时仍输出基础 Markdown 报告。
 
 不做：

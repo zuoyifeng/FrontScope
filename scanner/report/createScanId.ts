@@ -21,7 +21,17 @@ function slugify(value: string): string {
   return slug || 'scan';
 }
 
+/** Filesystem-safe local timestamp: `YYYY-MM-DD_HH-mm-ss`. */
+export function formatScanTimestamp(date: Date): string {
+  const pad = (value: number) => String(value).padStart(2, '0');
+
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+  ].join('-') + `_${pad(date.getHours())}-${pad(date.getMinutes())}-${pad(date.getSeconds())}`;
+}
+
 export function createScanId(date = new Date(), pageName?: string): string {
-  const timestamp = date.toISOString().replace(/[:.]/g, '-');
-  return `${timestamp}-${slugify(pageName ?? 'scan')}`;
+  return `${formatScanTimestamp(date)}-${slugify(pageName ?? 'scan')}`;
 }

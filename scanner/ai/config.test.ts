@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_CONFIG_FILENAME, mergeAiConfig, resolveAiConfig, resolveEffectiveAiConfig } from './config.js';
+import { DEFAULT_CONFIG_FILENAME, mergeAiConfig, resolveAiConfig, resolveEffectiveAiConfig, resolveLayeredAiConfig } from './config.js';
 
 function writeConfig(content: unknown): { cwd: string } {
   const cwd = mkdtempSync(join(tmpdir(), 'frontscope-config-'));
@@ -107,5 +107,48 @@ describe('resolveAiConfig', () => {
     expect(effective.provider).toBe('openai');
     expect(effective.baseURL).toBe('https://api.xiaomimimo.com/v1');
     expect(effective.model).toBe('mimo-v2.5-pro');
+  });
+
+  it('resolveLayeredAiConfig uses tool config when scanned project has no config file', () => {
+    const toolDir = mkdtempSync(join(tmpdir(), 'frontscope-tool-'));
+    writeFileSync(
+      join(toolDir, DEFAULT_CONFIG_FILENAME),
+      JSON.stringify({
+        ai: { provider: 'openai', model: 'mimo-v2.5-pro', apiKey: 'sk-tool', baseURL: 'https://api.example.com/v1' },
+      }),
+      'utf8',
+    );
+    const projectDir = mkdtempSync(join(tmpdir(), 'frontscope-project-'));
+
+    const config = resolveLayeredAiConfig({ cwd: toolDir, projectPath: projectDir, env: {} });
+
+    expect(config.provider).toBe('openai');
+    expect(config.apiKey).toBe('sk-tool');
+    expect(config.model).toBe('mimo-v2.5-pro');
+  });
+
+  it('resolveLayeredAiConfig overlays project ai config on top of tool config', () => {
+    const toolDir = mkdtempSync(join(tmpdir(), 'frontscope-tool-'));
+    writeFileSync(
+      join(toolDir, DEFAULT_CONFIG_FILENAME),
+      JSON.stringify({
+        ai: { provider: 'openai', model: 'tool-model', apiKey: 'sk-tool' },
+      }),
+      'utf8',
+    );
+    const projectDir = mkdtempSync(join(tmpdir(), 'frontscope-project-'));
+    writeFileSync(
+      join(projectDir, DEFAULT_CONFIG_FILENAME),
+      JSON.stringify({
+        ai: { model: 'project-model' },
+      }),
+      'utf8',
+    );
+
+    const config = resolveLayeredAiConfig({ cwd: toolDir, projectPath: projectDir, env: {} });
+
+    expect(config.apiKey).toBe('sk-tool');
+    expect(config.model).toBe('project-model');
+    expect(config.provider).toBe('openai');
   });
 });

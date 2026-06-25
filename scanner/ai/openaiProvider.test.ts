@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
-import { createOpenAiProvider, type FetchImpl } from './openaiProvider.js';
+import { createOpenAiProvider, testOpenAiConnection, type FetchImpl } from './openaiProvider.js';
 import { createAiProvider } from './aiProvider.js';
 import type { CompactEvidenceItem } from './types.js';
 
@@ -88,7 +88,7 @@ describe('createOpenAiProvider', () => {
 
     const body = JSON.parse(init.body as string);
     expect(body.model).toBe('mimo-v2.5-pro');
-    expect(body.max_completion_tokens).toBe(2000);
+    expect(body.max_completion_tokens).toBe(4096);
     expect(body.max_tokens).toBeUndefined();
     expect(body.thinking).toEqual({ type: 'disabled' });
   });
@@ -108,5 +108,31 @@ describe('createAiProvider', () => {
 
   it('rejects the openai provider without a model', () => {
     expect(() => createAiProvider({ provider: 'openai', apiKey: 'sk-test' })).toThrow('model');
+  });
+});
+
+describe('testOpenAiConnection', () => {
+  it('uses api-key header and a minimal completion payload for connectivity probes', async () => {
+    const fetchImpl = vi.fn<FetchImpl>().mockResolvedValue(
+      jsonResponse({ choices: [{ message: { content: '{"ok":true}' } }] }),
+    );
+
+    const result = await testOpenAiConnection({
+      baseURL: 'https://api.xiaomimimo.com/v1',
+      apiKey: 'sk-mimo',
+      authHeader: 'api-key',
+      model: 'mimo-v2.5-pro',
+      fetchImpl,
+    });
+
+    expect(result.content).toContain('ok');
+    const [, init] = fetchImpl.mock.calls[0];
+    const headers = init.headers as Record<string, string>;
+    expect(headers['api-key']).toBe('sk-mimo');
+
+    const body = JSON.parse(init.body as string);
+    expect(body.messages[1].content).toBe('ping');
+    expect(body.max_completion_tokens).toBe(16);
+    expect(body.max_tokens).toBeUndefined();
   });
 });

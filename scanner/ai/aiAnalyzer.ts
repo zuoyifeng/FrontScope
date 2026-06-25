@@ -6,9 +6,12 @@ const aiIssueSchema = z.object({
   title: z.string().min(1),
   severity: z.enum(['high', 'medium', 'low']),
   category: z.enum(['runtime', 'performance', 'network', 'memory', 'dependency', 'code-quality', 'project']),
-  evidenceIds: z.array(z.string().min(1)),
+  evidenceIds: z.array(z.string().min(1)).min(1),
   possibleCause: z.string().min(1),
   suggestion: z.string().min(1),
+  optimizationDirection: z.string().min(8),
+  implementationSteps: z.array(z.string().min(1)).min(2).max(8),
+  codeHints: z.string().min(1).optional(),
   verifyMethod: z.string().min(1),
 });
 

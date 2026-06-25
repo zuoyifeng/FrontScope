@@ -75,6 +75,8 @@ function createResult(overrides: Partial<ScanResultModel> = {}): ScanResultModel
           evidenceIds: ['lighthouse.metric.lcp'],
           possibleCause: '首屏资源较大',
           suggestion: '压缩首屏资源',
+          optimizationDirection: '减少首屏传输体积并优化 LCP 元素加载优先级。',
+          implementationSteps: ['定位 LCP 资源', '压缩或替换大图', '复扫对比 LCP'],
           verifyMethod: '重新扫描确认 LCP 下降',
         },
       ],
@@ -124,14 +126,14 @@ describe('ScanResultView', () => {
       />,
     );
 
-    expect(screen.getByText(/体检结果/)).toBeInTheDocument();
+    expect(screen.getByText(/首页/)).toBeInTheDocument();
     expect(screen.getByText(/本地模式/)).toBeInTheDocument();
-    expect(screen.getByText(/报告已导出到本地/)).toBeInTheDocument();
+    expect(screen.getByText(/已导出/)).toBeInTheDocument();
     expect(screen.getAllByText('/tmp/report.md').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('tab', { name: '概览' }));
     expect(screen.getByText('/tmp/admin-state.json')).toBeInTheDocument();
     expect(screen.getByText('扫描模式')).toBeInTheDocument();
-    expect(screen.getByText(/AI 健康评级/)).toBeInTheDocument();
+    expect(screen.getByText(/AI ·/)).toBeInTheDocument();
     expect(screen.getByText(/与上次扫描对比/)).toBeInTheDocument();
     expect(screen.getByText(/2026-06-23-previous/)).toBeInTheDocument();
     expect(screen.getByText(/AI 调用信息/)).toBeInTheDocument();
@@ -160,8 +162,8 @@ describe('ScanResultView', () => {
     );
 
     expect(screen.getByText('未命中目标页面，扫描结果可能是登录页或无权限页面')).toBeInTheDocument();
-    expect(screen.getByText(/请求地址/)).toBeInTheDocument();
-    expect(screen.getByText(/最终地址/)).toBeInTheDocument();
+    expect(screen.getAllByText(/请求地址/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/最终地址/).length).toBeGreaterThan(0);
   });
 
   it('displays scan mode and skipped local evidence in online results', () => {
