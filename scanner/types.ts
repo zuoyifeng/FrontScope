@@ -1,4 +1,6 @@
 import type { AiDiagnosis, AiRunMeta } from './ai/types.js';
+import type { FrameworkDetection } from './frameworks/types.js';
+import type { RouteCandidate } from './routes/types.js';
 
 export type ViewportMode = 'desktop' | 'mobile';
 export type ScanMode = 'local' | 'online';
@@ -38,6 +40,7 @@ export interface PackageEvidence {
   dependencies: Record<string, string>;
   devDependencies: Record<string, string>;
   frameworkHints: string[];
+  frameworkDetections?: FrameworkDetection[];
   configFiles: string[];
 }
 
@@ -363,6 +366,12 @@ export interface ScanModuleError {
   stack?: string;
 }
 
+export interface RouteDiscoveryEvidence {
+  status: ProjectQualityStatus;
+  candidates: RouteCandidate[];
+  skippedReason?: string;
+}
+
 export interface ScanResult {
   id: string;
   createdAt: string;
@@ -375,6 +384,7 @@ export interface ScanResult {
   network?: NetworkEvidence;
   package?: PackageEvidence;
   projectQuality?: ProjectQualityEvidence;
+  routeDiscovery?: RouteDiscoveryEvidence;
   memory?: MemoryEvidence;
   aiDiagnosis?: AiDiagnosis;
   aiRunMeta?: AiRunMeta;

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { detectFrameworks } from '../frameworks/detectFramework.js';
 import type { PackageEvidence } from '../types.js';
 
 const knownConfigFiles = [
@@ -42,6 +43,7 @@ export function scanPackage(projectPath: string): PackageEvidence {
       dependencies: {},
       devDependencies: {},
       frameworkHints: [],
+      frameworkDetections: detectFrameworks(projectPath),
       configFiles: [],
     };
   }
@@ -62,6 +64,7 @@ export function scanPackage(projectPath: string): PackageEvidence {
     dependencies,
     devDependencies,
     frameworkHints: knownFrameworkPackages.filter((name) => allPackages.has(name)),
+    frameworkDetections: detectFrameworks(projectPath),
     configFiles: knownConfigFiles.filter((file) => existsSync(join(projectPath, file))),
   };
 }

@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -342,6 +342,24 @@ describe('runScan', () => {
     expect(result.projectEvidenceEnabled).toBe(true);
     expect(result.package?.frameworkHints).toContain('react');
     expect(result.projectQuality).toBeDefined();
+    expect(result.routeDiscovery?.status).toBe('skipped');
+  });
+
+  it('includes route discovery candidates in local mode for Next.js projects', async () => {
+    const projectPath = createProject();
+    mkdirSync(join(projectPath, 'app', 'dashboard'), { recursive: true });
+    writeFileSync(join(projectPath, 'app', 'dashboard', 'page.tsx'), 'export default function Page() {}');
+    const outputDir = mkdtempSync(join(tmpdir(), 'frontscope-report-'));
+
+    const { result } = await runScan(
+      { scanMode: 'local', projectPath, outputDir, url: 'http://localhost:5173', pageName: '首页' },
+      { pageSessionDriver: createPageSessionDriver() },
+    );
+
+    expect(result.routeDiscovery?.status).toBe('ok');
+    expect(result.routeDiscovery?.candidates).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: '/dashboard', source: 'next-app' })]),
+    );
   });
 
   it('skips package and project-quality scanners in online mode', async () => {
@@ -363,6 +381,8 @@ describe('runScan', () => {
     expect(result.projectEvidenceEnabled).toBe(false);
     expect(result.package).toBeUndefined();
     expect(result.projectQuality).toBeUndefined();
+    expect(result.routeDiscovery?.status).toBe('skipped');
+    expect(result.routeDiscovery?.skippedReason).toContain('online mode');
     expect(result.runtime?.title).toBe('首页');
     expect(result.network?.summary.totalRequests).toBe(1);
     expect(result.performanceTrace?.longTasks[0].duration).toBe(62);

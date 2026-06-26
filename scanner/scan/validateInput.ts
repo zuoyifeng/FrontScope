@@ -38,9 +38,10 @@ export function validateInput(rawInput: unknown): NormalizedScanInput {
     throw new Error('local mode requires projectPath');
   }
 
-  // 如果提供了 projectPath，验证它是否存在
+  // Online mode never reads local project files; ignore a stale projectPath
+  // from old forms or saved requests before path existence checks.
   let projectPath: string | undefined;
-  if (input.projectPath) {
+  if (scanMode === 'local' && input.projectPath) {
     projectPath = resolve(input.projectPath);
     if (!existsSync(projectPath)) {
       throw new Error(`项目路径不存在: ${projectPath}`);

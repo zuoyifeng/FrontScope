@@ -58,6 +58,17 @@ describe('validateInput', () => {
     expect(result.projectPath).toBeUndefined();
   });
 
+  it('ignores projectPath in explicit online mode', () => {
+    const result = validateInput({
+      scanMode: 'online',
+      projectPath: '/path/that/does/not/exist',
+      url: 'https://example.com',
+    });
+
+    expect(result.scanMode).toBe('online');
+    expect(result.projectPath).toBeUndefined();
+  });
+
   it('defaults missing viewport to desktop', () => {
     const result = validateInput({
       scanMode: 'online',
