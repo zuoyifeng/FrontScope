@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-FrontScope is a local-first React, Vite, and TypeScript app with a Node API and scanner runtime. Frontend code lives in `src/`, with feature views under `src/features/` and global styling in `src/styles.css`. Scanner logic lives in `scanner/`: CLI entry in `scanner/cli.ts`, orchestration in `scanner/scan/`, collectors in `scanner/scanners/`, AI support in `scanner/ai/`, and reports in `scanner/report/`. The API server is in `server/`; product notes are in `docs/`.
+FrontScope is a local-first React, Vite, and TypeScript app with a Node API and scanner runtime. Frontend code lives in `src/`, with feature views under `src/features/` and global styling in `src/styles.css`. Scanner logic lives in `scanner/`: CLI entry in `scanner/cli.ts`, orchestration in `scanner/scan/`, auth profiles and visual recording in `scanner/auth/`, collectors in `scanner/scanners/`, AI support in `scanner/ai/`, and reports in `scanner/report/`. The API server is in `server/`; product notes are in `docs/`.
 
 ## Build, Test, and Development Commands
 
@@ -10,7 +10,7 @@ FrontScope is a local-first React, Vite, and TypeScript app with a Node API and 
 - `pnpm dev`: start the Vite frontend (`http://localhost:5173`) and Hono API (`http://localhost:3001`) together.
 - `pnpm dev:web`: start only the Vite frontend.
 - `pnpm dev:api`: start only the Hono API.
-- `pnpm scan --url http://localhost:5173`: run the scanner CLI; add `--project /path/to/project`, `--ai`, `--mock-ai`, or `--memory` as needed.
+- `pnpm scan --url http://localhost:5173`: run the scanner CLI; add `--project /path/to/project`, `--auth-state /path/to/.frontscope/auth/profile.json`, `--ai`, `--mock-ai`, or `--memory` as needed.
 - `pnpm test`: run Vitest once.
 - `pnpm test:watch`: run Vitest in watch mode.
 - `pnpm build`: run scanner TypeScript checks, project type checks, and the production Vite build.

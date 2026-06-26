@@ -30,6 +30,9 @@ pnpm-debug.log*
 # Config (keep examples, ignore local)
 frontscope.config.json
 
+# Auth state (sensitive)
+.frontscope/
+
 # TypeScript cache
 *.tsbuildinfo
 
