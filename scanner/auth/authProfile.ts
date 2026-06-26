@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export const AUTH_PROFILES_RELATIVE_DIR = '.frontscope/auth';
@@ -6,9 +6,36 @@ export const AUTH_PROFILES_RELATIVE_DIR = '.frontscope/auth';
 export interface AuthProfileDisplayMetadata {
   profileName: string;
   authStatePath: string;
+  metadata?: AuthProfileMetadata;
+}
+
+export type AuthProfileVerificationStatus =
+  | 'unknown'
+  | 'valid'
+  | 'login-redirect'
+  | 'unauthorized'
+  | 'error';
+
+export interface AuthProfileMetadata {
+  profileName: string;
+  authStatePath: string;
+  loginUrl: string;
+  targetOrigin: string;
+  createdAt: string;
+  lastVerifiedAt?: string;
+  notes?: string;
+  verification: {
+    status: AuthProfileVerificationStatus;
+    finalUrl?: string;
+    message?: string;
+  };
 }
 
 const SAFE_PROFILE_NAME_PATTERN = /^[a-zA-Z0-9._-]+$/;
+
+function toRelativeAuthStatePath(profileName: string): string {
+  return `${AUTH_PROFILES_RELATIVE_DIR}/${profileName}.json`;
+}
 
 export function assertSafeProfileName(profileName: string): void {
   if (!profileName || !SAFE_PROFILE_NAME_PATTERN.test(profileName)) {
@@ -27,11 +54,55 @@ export function resolveAuthProfilePath(profileName: string, baseDir = process.cw
   return join(resolveAuthProfilesDir(baseDir), `${profileName}.json`);
 }
 
-export function toAuthProfileDisplayMetadata(profileName: string): AuthProfileDisplayMetadata {
+export function resolveAuthProfileMetadataPath(profileName: string, baseDir = process.cwd()): string {
   assertSafeProfileName(profileName);
+  return join(resolveAuthProfilesDir(baseDir), `${profileName}.meta.json`);
+}
+
+export function readAuthProfileMetadata(
+  profileName: string,
+  baseDir = process.cwd(),
+): AuthProfileMetadata | undefined {
+  const metadataPath = resolveAuthProfileMetadataPath(profileName, baseDir);
+  if (!existsSync(metadataPath)) {
+    return undefined;
+  }
+
+  const metadata = JSON.parse(readFileSync(metadataPath, 'utf8')) as AuthProfileMetadata;
+  return {
+    ...metadata,
+    profileName,
+    authStatePath: toRelativeAuthStatePath(profileName),
+  };
+}
+
+export function writeAuthProfileMetadata(
+  metadata: AuthProfileMetadata,
+  baseDir = process.cwd(),
+): void {
+  assertSafeProfileName(metadata.profileName);
+  ensureAuthProfilesDirectory(baseDir);
+  const normalizedMetadata: AuthProfileMetadata = {
+    ...metadata,
+    authStatePath: toRelativeAuthStatePath(metadata.profileName),
+  };
+  writeFileSync(
+    resolveAuthProfileMetadataPath(metadata.profileName, baseDir),
+    `${JSON.stringify(normalizedMetadata, null, 2)}\n`,
+    'utf8',
+  );
+}
+
+export function toAuthProfileDisplayMetadata(
+  profileName: string,
+  baseDir = process.cwd(),
+): AuthProfileDisplayMetadata {
+  assertSafeProfileName(profileName);
+  const metadata = readAuthProfileMetadata(profileName, baseDir);
   return {
     profileName,
-    authStatePath: `${AUTH_PROFILES_RELATIVE_DIR}/${profileName}.json`,
+    authStatePath: toRelativeAuthStatePath(profileName),
+    ...(metadata ? { metadata } : {}),
   };
 }
 
@@ -46,10 +117,10 @@ export function listAuthProfiles(baseDir = process.cwd()): AuthProfileDisplayMet
   }
 
   return readdirSync(authDir)
-    .filter((fileName) => fileName.endsWith('.json'))
+    .filter((fileName) => fileName.endsWith('.json') && !fileName.endsWith('.meta.json'))
     .map((fileName) => fileName.slice(0, -'.json'.length))
     .filter((profileName) => SAFE_PROFILE_NAME_PATTERN.test(profileName))
-    .map((profileName) => toAuthProfileDisplayMetadata(profileName))
+    .map((profileName) => toAuthProfileDisplayMetadata(profileName, baseDir))
     .sort((left, right) => left.profileName.localeCompare(right.profileName));
 }
 

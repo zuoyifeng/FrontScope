@@ -144,6 +144,18 @@ function createScanResult(): ScanResult {
       frameworkHints: ['react', 'vite'],
       configFiles: ['vite.config.ts'],
     },
+    routeDiscovery: {
+      status: 'ok',
+      candidates: [
+        {
+          path: '/dashboard',
+          source: 'next-app',
+          confidence: 'high',
+          file: 'app/dashboard/page.tsx',
+          reason: 'Next.js App Router page file',
+        },
+      ],
+    },
     errors: [],
   };
 }
@@ -210,6 +222,11 @@ describe('compactEvidence', () => {
           id: 'package.summary',
           category: 'dependency',
           summary: expect.stringContaining('react'),
+        }),
+        expect.objectContaining({
+          id: 'route.discovery.0',
+          category: 'project',
+          summary: expect.stringContaining('/dashboard'),
         }),
       ]),
     );

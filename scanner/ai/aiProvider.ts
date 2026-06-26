@@ -51,7 +51,7 @@ export function createAiProvider(config: AiConfig): AiProvider {
   if (config.provider === 'openai') {
     if (!config.apiKey) {
       throw new Error(
-        'AI provider "openai" 缺少 apiKey。请在扫描表单的「AI 接口配置」中填写 API Key。',
+        'AI provider "openai" 缺少 apiKey。请在 frontscope.config.json 或环境变量中配置 API Key。',
       );
     }
     if (!config.model) {
