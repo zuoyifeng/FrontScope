@@ -20,7 +20,7 @@ export interface OpenAiProviderOptions {
 }
 
 const DEFAULT_TEMPERATURE = 0.2;
-const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
+const DEFAULT_MAX_OUTPUT_TOKENS = 8192;
 const DEFAULT_TIMEOUT_MS = 60_000;
 const TEST_MAX_OUTPUT_TOKENS = 16;
 const TEST_TIMEOUT_MS = 15_000;

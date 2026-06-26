@@ -16,6 +16,7 @@ import {
 import { createScanId } from '../report/createScanId.js';
 import { writeReport } from '../report/writeReport.js';
 import { redactScanInput } from './redactScanInput.js';
+import { collectRouteDiscoveryEvidence } from '../routes/frameworkRoutes.js';
 import { scanLighthouse } from '../scanners/lighthouseScanner.js';
 import { scanPackage } from '../scanners/packageScanner.js';
 import { collectPageEvidence, type PageSessionDriver } from './pageSession.js';
@@ -29,6 +30,7 @@ import type {
   PackageEvidence,
   PerformanceTraceEvidence,
   ProjectQualityEvidence,
+  RouteDiscoveryEvidence,
   RuntimeEvidence,
   NormalizedScanInput,
   ScanInput,
@@ -160,30 +162,17 @@ export async function runScan(rawInput: unknown, dependencies: RunScanDependenci
   }
 
   let lighthouse: LighthouseEvidence | undefined;
-  if (input.authStatePath) {
-    reportProgress(dependencies.onProgress, {
-      stepKey: 'lighthouse',
-      stepStatus: 'skipped',
-      stepDetail: '登录态场景下暂跳过 Lighthouse',
+  reportProgress(dependencies.onProgress, { stepKey: 'lighthouse', stepStatus: 'running' });
+  try {
+    lighthouse = await scanLighthouse({
+      url: input.url,
+      viewport: input.viewport,
+      authStatePath: input.authStatePath,
     });
-    errors.push(
-      toModuleError(
-        'lighthouse',
-        new Error('检测到登录态文件：当前 Lighthouse 模块暂不复用 storageState，已跳过以避免误测登录页。'),
-      ),
-    );
-  } else {
-    reportProgress(dependencies.onProgress, { stepKey: 'lighthouse', stepStatus: 'running' });
-    try {
-      lighthouse = await scanLighthouse({
-        url: input.url,
-        viewport: input.viewport,
-      });
-      reportProgress(dependencies.onProgress, { stepKey: 'lighthouse', stepStatus: 'completed' });
-    } catch (error) {
-      errors.push(toModuleError('lighthouse', error));
-      reportProgress(dependencies.onProgress, { stepKey: 'lighthouse', stepStatus: 'failed' });
-    }
+    reportProgress(dependencies.onProgress, { stepKey: 'lighthouse', stepStatus: 'completed' });
+  } catch (error) {
+    errors.push(toModuleError('lighthouse', error));
+    reportProgress(dependencies.onProgress, { stepKey: 'lighthouse', stepStatus: 'failed' });
   }
 
   let packageEvidence: PackageEvidence | undefined;
@@ -236,6 +225,17 @@ export async function runScan(rawInput: unknown, dependencies: RunScanDependenci
     }
   }
 
+  let routeDiscovery: RouteDiscoveryEvidence;
+  if (shouldScanProject && input.projectPath) {
+    routeDiscovery = collectRouteDiscoveryEvidence(input.projectPath);
+  } else {
+    routeDiscovery = {
+      status: 'skipped',
+      candidates: [],
+      skippedReason: 'online mode cannot read local route files',
+    };
+  }
+
   const result: ScanResult = {
     id,
     createdAt: createdAt.toISOString(),
@@ -248,6 +248,7 @@ export async function runScan(rawInput: unknown, dependencies: RunScanDependenci
     network,
     package: packageEvidence,
     projectQuality,
+    routeDiscovery,
     memory,
     errors,
   };

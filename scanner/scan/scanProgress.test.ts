@@ -37,7 +37,7 @@ describe('scanProgress', () => {
     ]);
   });
 
-  it('marks lighthouse as skipped when auth state is used', () => {
+  it('marks lighthouse as pending when auth state is used', () => {
     const steps = createScanProgressPlan({
       scanMode: 'online',
       authStatePath: '/tmp/auth.json',
@@ -45,7 +45,10 @@ describe('scanProgress', () => {
       enableMemory: false,
     });
 
-    expect(steps.find((step) => step.key === 'lighthouse')).toMatchObject({ status: 'skipped' });
+    expect(steps.find((step) => step.key === 'lighthouse')).toMatchObject({
+      status: 'pending',
+      detail: '复用登录态采集 LCP/CLS/TBT 等指标',
+    });
   });
 
   it('updates percent as steps complete', () => {

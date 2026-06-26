@@ -81,6 +81,15 @@ export function compactEvidence(result: ScanResult, options: CompactEvidenceOpti
     });
   }
 
+  if (result.runtime) {
+    add({
+      id: 'runtime.summary',
+      category: 'runtime',
+      summary: `Page "${result.runtime.title ?? 'unknown'}" loaded at ${result.runtime.finalUrl ?? result.input.url}`,
+      detail: `consoleErrors=${result.runtime.consoleErrors.length}, pageErrors=${result.runtime.pageErrors.length}, httpErrors=${result.runtime.httpErrors.length}`,
+    });
+  }
+
   add({
     id: 'lighthouse.metric.lcp',
     category: 'performance',
@@ -130,6 +139,17 @@ export function compactEvidence(result: ScanResult, options: CompactEvidenceOpti
     });
   });
 
+  if (result.performanceTrace) {
+    const trace = result.performanceTrace;
+    const clsScore = trace.layoutShifts.reduce((sum, shift) => sum + shift.score, 0);
+    add({
+      id: 'trace.summary',
+      category: 'performance',
+      summary: `Trace captured ${trace.longTasks.length} long tasks, ${trace.layoutShifts.length} layout shifts, total ${trace.totalDurationMs.toFixed(0)} ms`,
+      detail: `scripting=${trace.categoryDurations.scripting}ms, rendering=${trace.categoryDurations.rendering}ms, clsApprox=${clsScore.toFixed(3)}`,
+    });
+  }
+
   result.network?.summary.slowRequests.forEach((request, index) => {
     add({
       id: `network.slow.${index}`,
@@ -176,6 +196,17 @@ export function compactEvidence(result: ScanResult, options: CompactEvidenceOpti
         detail: result.package.configFiles.join(', ') || undefined,
       });
     }
+  }
+
+  if (result.routeDiscovery?.status === 'ok') {
+    result.routeDiscovery.candidates.forEach((candidate, index) => {
+      add({
+        id: `route.discovery.${index}`,
+        category: 'project',
+        summary: `Discovered route ${candidate.path} from ${candidate.source}`,
+        detail: candidate.file,
+      });
+    });
   }
 
   const quality = result.projectQuality;

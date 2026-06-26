@@ -32,7 +32,7 @@ import {
 } from '@ant-design/icons';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { EvidenceModuleKey, EvidenceModuleView, ScanMode } from './types';
+import type { EvidenceModuleKey, EvidenceModuleView, LocalProjectIntakeView, ScanMode } from './types';
 import { EVIDENCE_MODULE_STATUS_META, buildEvidenceModules } from './evidenceModules';
 import { buildScanReadiness } from './scanReadiness';
 import { ScanProgressPanel } from './ScanProgressPanel';
@@ -117,9 +117,31 @@ interface AiConnectionTestResult {
   responsePreview?: string;
 }
 
+type AuthProfileVerificationStatus =
+  | 'unknown'
+  | 'valid'
+  | 'login-redirect'
+  | 'unauthorized'
+  | 'error';
+
+interface AuthProfileMetadata {
+  profileName: string;
+  authStatePath: string;
+  loginUrl: string;
+  targetOrigin: string;
+  createdAt: string;
+  lastVerifiedAt?: string;
+  verification: {
+    status: AuthProfileVerificationStatus;
+    finalUrl?: string;
+    message?: string;
+  };
+}
+
 interface AuthProfile {
   profileName: string;
   authStatePath: string;
+  metadata?: AuthProfileMetadata;
 }
 
 interface ScanFormValues {
@@ -177,6 +199,7 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
   const enableAi = Form.useWatch('enableAi', form);
   const url = Form.useWatch('url', form) ?? '';
   const projectPath = Form.useWatch('projectPath', form) ?? '';
+  const authStatePath = Form.useWatch('authStatePath', form) ?? '';
   const [scanMode, setScanMode] = useState<ScanMode>('online');
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState<ScanProgressView | null>(null);
@@ -187,14 +210,32 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
   const [aiConnectionTest, setAiConnectionTest] = useState<AiConnectionTestResult | null>(null);
   const [authProfiles, setAuthProfiles] = useState<AuthProfile[]>([]);
   const [authProfilesLoading, setAuthProfilesLoading] = useState(false);
-  const [creatingProfile, setCreatingProfile] = useState(false);
+  const [authProfileVerifying, setAuthProfileVerifying] = useState(false);
+  const [authProfileVerifyError, setAuthProfileVerifyError] = useState<string | null>(null);
+  const [authRecording, setAuthRecording] = useState<{
+    recordingId: string;
+    profileName: string;
+    loginUrl: string;
+    targetUrl: string;
+    message: string;
+  } | null>(null);
+  const [startingRecording, setStartingRecording] = useState(false);
+  const [completingRecording, setCompletingRecording] = useState(false);
+  const [cancelingRecording, setCancelingRecording] = useState(false);
   const [createProfileError, setCreateProfileError] = useState<string | null>(null);
   const [showCreatePanel, setShowCreatePanel] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
   const [newLoginUrl, setNewLoginUrl] = useState('');
   const [newTargetUrl, setNewTargetUrl] = useState('');
+  const [localProjectIntake, setLocalProjectIntake] = useState<LocalProjectIntakeView | null>(null);
+  const [inspectingProject, setInspectingProject] = useState(false);
+  const [inspectProjectError, setInspectProjectError] = useState<string | null>(null);
 
   const completedScanResult = scanProgress?.result?.result ?? null;
+  const selectedAuthProfile = useMemo(
+    () => authProfiles.find((profile) => profile.authStatePath === authStatePath),
+    [authProfiles, authStatePath],
+  );
 
   const loadAuthProfiles = useCallback(async () => {
     setAuthProfilesLoading(true);
@@ -240,6 +281,48 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
       void loadAuthProfiles();
     }
   }, [scanMode, loadAuthProfiles]);
+
+  useEffect(() => {
+    setLocalProjectIntake(null);
+    setInspectProjectError(null);
+  }, [projectPath, scanMode]);
+
+  const handleInspectLocalProject = async () => {
+    const trimmedPath = projectPath.trim();
+    if (!trimmedPath) {
+      setInspectProjectError('请先填写项目路径');
+      return;
+    }
+
+    setInspectingProject(true);
+    setInspectProjectError(null);
+    setLocalProjectIntake(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/local-projects/inspect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectPath: trimmedPath }),
+      });
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        const errorMessage = result.error ?? '本地项目检查失败';
+        setInspectProjectError(errorMessage);
+        message.error(errorMessage);
+        return;
+      }
+
+      setLocalProjectIntake(result.data as LocalProjectIntakeView);
+      message.success('本地项目检查完成');
+    } catch {
+      const errorMessage = '无法连接到 API 服务';
+      setInspectProjectError(errorMessage);
+      message.error(errorMessage);
+    } finally {
+      setInspectingProject(false);
+    }
+  };
 
   const apiReachable = !aiStatusLoading && aiStatus !== null;
   const workspaceInput = useMemo(
@@ -308,7 +391,7 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
     }
   };
 
-  const handleCreateProfile = async () => {
+  const handleStartAuthRecording = async () => {
     const profileName = newProfileName.trim();
     const loginUrl = newLoginUrl.trim();
     const targetUrl = newTargetUrl.trim() || form.getFieldValue('url')?.trim();
@@ -318,33 +401,167 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
       return;
     }
 
-    setCreatingProfile(true);
+    if (!targetUrl) {
+      setCreateProfileError('请填写目标页地址，或在上方填写页面地址');
+      return;
+    }
+
+    setStartingRecording(true);
     setCreateProfileError(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/auth-profiles`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth-profiles/recordings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profileName, loginUrl, targetUrl }),
       });
       const result = await response.json();
 
-      if (!response.ok) {
-        setCreateProfileError(result.error ?? '创建登录态失败');
+      if (!response.ok || !result.success) {
+        setCreateProfileError(result.error ?? '启动登录录制失败');
+        return;
+      }
+
+      setAuthRecording(result.data);
+    } catch {
+      setCreateProfileError('无法连接到 API 服务');
+    } finally {
+      setStartingRecording(false);
+    }
+  };
+
+  const handleCompleteAuthRecording = async () => {
+    if (!authRecording) return;
+    setCompletingRecording(true);
+    setCreateProfileError(null);
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/auth-profiles/recordings/${encodeURIComponent(authRecording.recordingId)}/complete`,
+        { method: 'POST' },
+      );
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        setCreateProfileError(result.error ?? '登录态验证失败，未保存配置');
         return;
       }
 
       await loadAuthProfiles();
-      form.setFieldsValue({ authStatePath: result.authStatePath });
+      form.setFieldsValue({ authStatePath: result.data.authStatePath });
+      setAuthProfiles((profiles) =>
+        profiles.some((profile) => profile.profileName === result.data.profileName)
+          ? profiles.map((profile) =>
+              profile.profileName === result.data.profileName ? { ...profile, metadata: result.data } : profile,
+            )
+          : [
+              ...profiles,
+              {
+                profileName: result.data.profileName,
+                authStatePath: result.data.authStatePath,
+                metadata: result.data,
+              },
+            ],
+      );
+      setAuthRecording(null);
       setShowCreatePanel(false);
       setNewProfileName('');
       setNewLoginUrl('');
       setNewTargetUrl('');
-      message.success('登录态已保存');
+      message.success('登录态已验证并保存');
     } catch {
       setCreateProfileError('无法连接到 API 服务');
     } finally {
-      setCreatingProfile(false);
+      setCompletingRecording(false);
+    }
+  };
+
+  const handleCancelAuthRecording = async () => {
+    if (!authRecording) {
+      setShowCreatePanel(false);
+      setCreateProfileError(null);
+      return;
+    }
+
+    setCancelingRecording(true);
+    try {
+      await fetch(
+        `${API_BASE_URL}/api/auth-profiles/recordings/${encodeURIComponent(authRecording.recordingId)}/cancel`,
+        { method: 'POST' },
+      );
+    } finally {
+      setAuthRecording(null);
+      setCancelingRecording(false);
+      setShowCreatePanel(false);
+      setCreateProfileError(null);
+    }
+  };
+
+  const authVerificationLabel: Record<AuthProfileVerificationStatus, string> = {
+    unknown: '未验证',
+    valid: '登录态有效',
+    'login-redirect': '跳转登录页',
+    unauthorized: '权限不足',
+    error: '验证失败',
+  };
+
+  const authVerificationColor: Record<AuthProfileVerificationStatus, string> = {
+    unknown: 'default',
+    valid: 'success',
+    'login-redirect': 'warning',
+    unauthorized: 'error',
+    error: 'error',
+  };
+
+  const handleVerifyAuthProfile = async () => {
+    const profile = selectedAuthProfile;
+    const targetUrl = url.trim();
+    if (!profile) {
+      setAuthProfileVerifyError('请选择登录态配置');
+      return;
+    }
+    if (!targetUrl) {
+      setAuthProfileVerifyError('请先填写页面地址');
+      return;
+    }
+
+    setAuthProfileVerifying(true);
+    setAuthProfileVerifyError(null);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/auth-profiles/${encodeURIComponent(profile.profileName)}/verify`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetUrl }),
+        },
+      );
+      const result = await response.json();
+
+      if (!response.ok) {
+        const errorMessage = result.error ?? '登录态验证失败';
+        setAuthProfileVerifyError(errorMessage);
+        message.error(errorMessage);
+        return;
+      }
+
+      const metadata = result as AuthProfileMetadata;
+      setAuthProfiles((profiles) =>
+        profiles.map((item) =>
+          item.profileName === metadata.profileName ? { ...item, metadata } : item,
+        ),
+      );
+
+      if (metadata.verification.status === 'valid') {
+        message.success('登录态验证通过');
+      } else {
+        message.warning(metadata.verification.message ?? authVerificationLabel[metadata.verification.status]);
+      }
+    } catch {
+      const errorMessage = '无法连接到 API 服务';
+      setAuthProfileVerifyError(errorMessage);
+      message.error(errorMessage);
+    } finally {
+      setAuthProfileVerifying(false);
     }
   };
 
@@ -481,14 +698,48 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
               </Form.Item>
 
               {scanMode === 'local' ? (
-                <Form.Item
-                  label="项目路径"
-                  name="projectPath"
-                  rules={[{ required: true, message: '本地模式需填写项目路径' }]}
-                  tooltip="本地项目路径，用于扫描依赖、项目质量和本地代码审查。"
-                >
-                  <Input placeholder="/absolute/path/to/frontend-project" />
-                </Form.Item>
+                <>
+                  <Form.Item
+                    label="项目路径"
+                    name="projectPath"
+                    rules={[{ required: true, message: '本地模式需填写项目路径' }]}
+                    tooltip="本地项目路径，用于扫描依赖、项目质量和本地代码审查。"
+                  >
+                    <Input placeholder="/absolute/path/to/frontend-project" />
+                  </Form.Item>
+                  <Space direction="vertical" size={8} className="full-width" style={{ marginBottom: 16 }}>
+                    <Button
+                      onClick={() => void handleInspectLocalProject()}
+                      loading={inspectingProject}
+                      disabled={!projectPath.trim()}
+                    >
+                      检查本地项目
+                    </Button>
+                    {inspectProjectError && <Alert type="error" showIcon message={inspectProjectError} />}
+                    {localProjectIntake && (
+                      <Card size="small" title="本地项目摘要">
+                        <Space direction="vertical" size={4} className="full-width">
+                          <Text>包管理器：{localProjectIntake.packageManager}</Text>
+                          <Text>
+                            开发脚本：
+                            {localProjectIntake.devScripts.length > 0
+                              ? localProjectIntake.devScripts.map((script) => `${script.name} (${script.command})`).join('、')
+                              : '未识别'}
+                          </Text>
+                          <Text>
+                            框架检测：
+                            {localProjectIntake.frameworkDetections.length > 0
+                              ? localProjectIntake.frameworkDetections
+                                  .map((item) => `${item.framework} (${item.confidence})`)
+                                  .join('、')
+                              : '未识别'}
+                          </Text>
+                          <Text>路由候选：{localProjectIntake.routeCandidates.length} 条</Text>
+                        </Space>
+                      </Card>
+                    )}
+                  </Space>
+                </>
               ) : (
                 <>
                   <Form.Item
@@ -506,6 +757,23 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
                       }))}
                     />
                   </Form.Item>
+                  <Space direction="vertical" size={8} className="full-width" style={{ marginBottom: 16 }}>
+                    <Space wrap>
+                      <Button
+                        onClick={() => void handleVerifyAuthProfile()}
+                        loading={authProfileVerifying}
+                        disabled={!selectedAuthProfile}
+                      >
+                        验证登录态
+                      </Button>
+                      {selectedAuthProfile?.metadata?.verification && (
+                        <Tag color={authVerificationColor[selectedAuthProfile.metadata.verification.status]}>
+                          {authVerificationLabel[selectedAuthProfile.metadata.verification.status]}
+                        </Tag>
+                      )}
+                    </Space>
+                    {authProfileVerifyError && <Alert type="error" showIcon message={authProfileVerifyError} />}
+                  </Space>
                   {!showCreatePanel ? (
                     <Button
                       type="dashed"
@@ -529,10 +797,7 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
                         <Button
                           type="text"
                           size="small"
-                          onClick={() => {
-                            setShowCreatePanel(false);
-                            setCreateProfileError(null);
-                          }}
+                          onClick={() => void handleCancelAuthRecording()}
                         >
                           取消
                         </Button>
@@ -543,29 +808,50 @@ export function ScanWorkspace({ onReportReady }: ScanWorkspaceProps) {
                           placeholder="配置名称，例如 admin"
                           value={newProfileName}
                           onChange={(event) => setNewProfileName(event.target.value)}
-                          disabled={creatingProfile}
+                          disabled={startingRecording || Boolean(authRecording)}
                         />
                         <Input
                           placeholder="登录页地址，例如 https://example.com/login"
                           value={newLoginUrl}
                           onChange={(event) => setNewLoginUrl(event.target.value)}
-                          disabled={creatingProfile}
+                          disabled={startingRecording || Boolean(authRecording)}
                         />
                         <Input
                           placeholder="目标页地址（可选，默认使用上方页面地址）"
                           value={newTargetUrl}
                           onChange={(event) => setNewTargetUrl(event.target.value)}
-                          disabled={creatingProfile}
+                          disabled={startingRecording || Boolean(authRecording)}
                         />
                         {createProfileError && <Alert type="error" showIcon message={createProfileError} />}
-                        <Button
-                          type="primary"
-                          block
-                          loading={creatingProfile}
-                          onClick={() => void handleCreateProfile()}
-                        >
-                          {creatingProfile ? '浏览器登录中…' : '生成登录态'}
-                        </Button>
+                        {authRecording ? (
+                          <>
+                            <Alert type="info" showIcon message={authRecording.message} />
+                            <Button
+                              type="primary"
+                              block
+                              loading={completingRecording}
+                              onClick={() => void handleCompleteAuthRecording()}
+                            >
+                              我已完成登录，验证并保存
+                            </Button>
+                            <Button
+                              block
+                              loading={cancelingRecording}
+                              onClick={() => void handleCancelAuthRecording()}
+                            >
+                              取消录制
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            type="primary"
+                            block
+                            loading={startingRecording}
+                            onClick={() => void handleStartAuthRecording()}
+                          >
+                            {startingRecording ? '正在打开浏览器…' : '开始登录录制'}
+                          </Button>
+                        )}
                       </Space>
                     </Card>
                   )}

@@ -71,30 +71,57 @@ describe('parseAiDiagnosis', () => {
     ).toThrow(/evidenceIds|evidence id/);
   });
 
-  it('rejects evidence ids that are not present in compacted evidence', () => {
-    expect(() =>
-      parseAiDiagnosis(
-        JSON.stringify({
-          summary: '引用了不存在的证据。',
-          healthLevel: 'critical',
-          topIssues: [
-            {
-              title: '不存在的证据',
-              severity: 'high',
-              category: 'performance',
-              evidenceIds: ['lighthouse.audit.missing'],
-              possibleCause: '未知',
-              suggestion: '补充证据',
-              optimizationDirection: '仅引用真实 evidence id。',
-              implementationSteps: ['检查 evidence 列表', '修正 evidenceIds'],
-              verifyMethod: '重新扫描',
-            },
-          ],
-          nextActions: [],
-        }),
-        new Set(evidence.map((item) => item.id)),
-      ),
-    ).toThrow('AI issue references unknown evidence id: lighthouse.audit.missing');
+  it('sanitizes unknown evidence ids to a known fallback id', () => {
+    const diagnosis = parseAiDiagnosis(
+      JSON.stringify({
+        summary: '引用了不存在的证据。',
+        healthLevel: 'critical',
+        topIssues: [
+          {
+            title: '不存在的证据',
+            severity: 'high',
+            category: 'performance',
+            evidenceIds: ['lighthouse.audit.missing'],
+            possibleCause: '未知',
+            suggestion: '补充证据',
+            optimizationDirection: '仅引用真实 evidence id。',
+            implementationSteps: ['检查 evidence 列表', '修正 evidenceIds'],
+            verifyMethod: '重新扫描',
+          },
+        ],
+        nextActions: [],
+      }),
+      new Set(evidence.map((item) => item.id)),
+    );
+
+    expect(diagnosis.topIssues[0].evidenceIds).toEqual(['runtime.console.0']);
+  });
+
+  it('repairs truncated JSON returned by long-context models', () => {
+    const complete = JSON.stringify({
+      summary: 'ok',
+      healthLevel: 'warning',
+      topIssues: [
+        {
+          title: 'x',
+          severity: 'high',
+          category: 'network',
+          evidenceIds: ['runtime.console.0'],
+          possibleCause: 'GIS 地图库体积过大',
+          suggestion: '拆分懒加载',
+          optimizationDirection: '优先削减首屏 GIS 脚本体积并推迟非关键模块加载。',
+          implementationSteps: ['定位大资源', '路由级 lazy import'],
+          verifyMethod: '重新扫描',
+        },
+      ],
+      nextActions: [],
+    });
+    const truncated = complete.slice(0, -2);
+
+    const diagnosis = parseAiDiagnosis(truncated, new Set(['runtime.console.0']));
+
+    expect(diagnosis.summary).toBe('ok');
+    expect(diagnosis.topIssues[0].title).toBe('x');
   });
 });
 

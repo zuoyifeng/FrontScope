@@ -88,7 +88,7 @@ describe('createOpenAiProvider', () => {
 
     const body = JSON.parse(init.body as string);
     expect(body.model).toBe('mimo-v2.5-pro');
-    expect(body.max_completion_tokens).toBe(4096);
+    expect(body.max_completion_tokens).toBe(8192);
     expect(body.max_tokens).toBeUndefined();
     expect(body.thinking).toEqual({ type: 'disabled' });
   });
@@ -104,6 +104,15 @@ describe('createAiProvider', () => {
 
   it('rejects the openai provider without an apiKey', () => {
     expect(() => createAiProvider({ provider: 'openai', model: 'gpt-4o-mini' })).toThrow('apiKey');
+  });
+
+  it('points missing apiKey errors to project config instead of the scan form', () => {
+    expect(() => createAiProvider({ provider: 'openai', model: 'gpt-4o-mini' })).toThrow(
+      'frontscope.config.json',
+    );
+    expect(() => createAiProvider({ provider: 'openai', model: 'gpt-4o-mini' })).not.toThrow(
+      '扫描表单',
+    );
   });
 
   it('rejects the openai provider without a model', () => {

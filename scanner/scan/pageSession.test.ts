@@ -15,6 +15,10 @@ interface DriverOptions {
   sentMethods?: string[];
   receivedAuthStatePath?: { value?: string };
   finalUrl?: string;
+  /** Delay goto to simulate slow page loads (ms). */
+  gotoDelayMs?: number;
+  /** When true, Tracing.end does not emit tracingComplete. */
+  hangTracingComplete?: boolean;
 }
 
 function createPageSessionDriver(options: DriverOptions = {}): PageSessionDriver {
@@ -36,6 +40,9 @@ function createPageSessionDriver(options: DriverOptions = {}): PageSessionDriver
           },
           async goto() {
             if (options.gotoCounter) options.gotoCounter.count += 1;
+            if (options.gotoDelayMs) {
+              await new Promise((resolve) => setTimeout(resolve, options.gotoDelayMs));
+            }
             // Simulate a console error and a failed HTTP response.
             pageHandlers['console']?.forEach((handler) =>
               handler({
@@ -92,7 +99,9 @@ function createPageSessionDriver(options: DriverOptions = {}): PageSessionDriver
               throw new Error('Tracing is unavailable');
             }
             if (method === 'Tracing.end') {
-              queueMicrotask(() => emit('Tracing.tracingComplete', { stream: 'trace-stream' }));
+              if (!options.hangTracingComplete) {
+                queueMicrotask(() => emit('Tracing.tracingComplete', { stream: 'trace-stream' }));
+              }
             }
             if (method === 'IO.read') {
               expect(params).toEqual({ handle: 'trace-stream' });
@@ -235,5 +244,62 @@ describe('collectPageEvidence', () => {
       'performance-trace',
       'runtime',
     ]);
+  });
+
+  it('does not crash when page load outlasts the old tracing wait window', async () => {
+    const outputDir = mkdtempSync(join(tmpdir(), 'frontscope-page-slow-'));
+    vi.useFakeTimers();
+
+    try {
+      const evidencePromise = collectPageEvidence(
+        {
+          url: 'http://localhost:5173',
+          viewport: 'desktop',
+          screenshotPath: join(outputDir, 'screenshot.png'),
+          tracePath: join(outputDir, 'trace.json'),
+        },
+        createPageSessionDriver({ gotoDelayMs: 35_000 }),
+      );
+
+      await vi.advanceTimersByTimeAsync(35_000);
+      const evidence = await evidencePromise;
+
+      expect(evidence.runtime?.title).toBe('首页');
+      expect(evidence.performanceTrace?.longTasks[0].duration).toBe(62);
+      expect(evidence.errors).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('records performance-trace error when tracing never completes after end', async () => {
+    const outputDir = mkdtempSync(join(tmpdir(), 'frontscope-page-trace-hang-'));
+    vi.useFakeTimers();
+
+    try {
+      const evidencePromise = collectPageEvidence(
+        {
+          url: 'http://localhost:5173',
+          viewport: 'desktop',
+          screenshotPath: join(outputDir, 'screenshot.png'),
+          tracePath: join(outputDir, 'trace.json'),
+        },
+        createPageSessionDriver({ hangTracingComplete: true }),
+      );
+
+      await vi.advanceTimersByTimeAsync(35_000);
+      const evidence = await evidencePromise;
+
+      expect(evidence.runtime?.title).toBe('首页');
+      expect(evidence.performanceTrace).toBeUndefined();
+      expect(evidence.errors).toEqual([
+        expect.objectContaining({
+          module: 'performance-trace',
+          message: 'Tracing did not complete within timeout',
+        }),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -51,8 +51,8 @@ export function createScanProgressPlan(
     {
       key: 'lighthouse',
       label: 'Lighthouse 性能审计',
-      status: input.authStatePath ? 'skipped' : 'pending',
-      detail: input.authStatePath ? '登录态场景下暂跳过 Lighthouse' : undefined,
+      status: 'pending',
+      detail: input.authStatePath ? '复用登录态采集 LCP/CLS/TBT 等指标' : undefined,
     },
   ];
 

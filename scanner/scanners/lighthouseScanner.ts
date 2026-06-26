@@ -7,6 +7,7 @@ import type { LighthouseAuditEvidence, LighthouseEvidence, ViewportMode } from '
 export interface LighthouseScanOptions {
   url: string;
   viewport: ViewportMode;
+  authStatePath?: string;
 }
 
 function scoreToPercent(score: number | null | undefined): number | null {
@@ -62,7 +63,96 @@ async function findChromePath(): Promise<string | undefined> {
   });
 }
 
-export async function scanLighthouse(options: LighthouseScanOptions): Promise<LighthouseEvidence> {
+export function allocateDebugPort(): number {
+  return 9200 + Math.floor(Math.random() * 800);
+}
+
+function lighthouseScreenEmulation(viewport: ViewportMode) {
+  return viewport === 'mobile'
+    ? undefined
+    : {
+        mobile: false,
+        width: 1440,
+        height: 900,
+        deviceScaleFactor: 1,
+        disabled: false,
+      };
+}
+
+function parseLighthouseReport(runnerResult: Awaited<ReturnType<typeof lighthouse>>): LighthouseEvidence {
+  if (!runnerResult?.lhr) {
+    throw new Error('Lighthouse did not return a report');
+  }
+
+  const lhr = runnerResult.lhr;
+  const audits = lhr.audits;
+
+  const auditEvidence: LighthouseAuditEvidence[] = Object.values(audits)
+    .filter((audit) => audit.score !== null && typeof audit.score === 'number' && audit.score < 0.9)
+    .slice(0, 15)
+    .map((audit) => ({
+      id: audit.id,
+      title: audit.title,
+      score: audit.score,
+      displayValue: audit.displayValue,
+      description: audit.description,
+    }));
+
+  return {
+    scores: {
+      performance: scoreToPercent(lhr.categories.performance?.score),
+      accessibility: scoreToPercent(lhr.categories.accessibility?.score),
+      bestPractices: scoreToPercent(lhr.categories['best-practices']?.score),
+      seo: scoreToPercent(lhr.categories.seo?.score),
+    },
+    metrics: {
+      largestContentfulPaint: readDisplayValue(audits, 'largest-contentful-paint'),
+      cumulativeLayoutShift: readDisplayValue(audits, 'cumulative-layout-shift'),
+      totalBlockingTime: readDisplayValue(audits, 'total-blocking-time'),
+      speedIndex: readDisplayValue(audits, 'speed-index'),
+    },
+    audits: auditEvidence,
+  };
+}
+
+const NAVIGATION_TIMEOUT_MS = 60_000;
+
+async function scanLighthouseWithAuth(options: LighthouseScanOptions & { authStatePath: string }): Promise<LighthouseEvidence> {
+  const { chromium, devices } = await import('playwright');
+  const debugPort = allocateDebugPort();
+  const browser = await chromium.launch({
+    headless: true,
+    args: [`--remote-debugging-port=${debugPort}`],
+  });
+
+  try {
+    const context =
+      options.viewport === 'mobile'
+        ? await browser.newContext({ ...devices['iPhone 13'], storageState: options.authStatePath })
+        : await browser.newContext({ viewport: { width: 1440, height: 900 }, storageState: options.authStatePath });
+    const page = await context.newPage();
+
+    try {
+      await page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
+    } catch {
+      // Authenticated dashboards may keep polling; still attempt Lighthouse on the live session.
+    }
+
+    const runnerResult = await lighthouse(options.url, {
+      port: debugPort,
+      output: 'json',
+      logLevel: 'error',
+      formFactor: options.viewport,
+      screenEmulation: lighthouseScreenEmulation(options.viewport),
+    });
+
+    return parseLighthouseReport(runnerResult);
+  } finally {
+    await browser.close();
+  }
+}
+
+async function scanLighthouseWithoutAuth(options: LighthouseScanOptions): Promise<LighthouseEvidence> {
   const chromePath = await findChromePath();
 
   const chrome = await chromeLauncher.launch({
@@ -76,52 +166,18 @@ export async function scanLighthouse(options: LighthouseScanOptions): Promise<Li
       output: 'json',
       logLevel: 'error',
       formFactor: options.viewport,
-      screenEmulation:
-        options.viewport === 'mobile'
-          ? undefined
-          : {
-              mobile: false,
-              width: 1440,
-              height: 900,
-              deviceScaleFactor: 1,
-              disabled: false,
-            },
+      screenEmulation: lighthouseScreenEmulation(options.viewport),
     });
 
-    if (!runnerResult?.lhr) {
-      throw new Error('Lighthouse did not return a report');
-    }
-
-    const lhr = runnerResult.lhr;
-    const audits = lhr.audits;
-
-    const auditEvidence: LighthouseAuditEvidence[] = Object.values(audits)
-      .filter((audit) => audit.score !== null && typeof audit.score === 'number' && audit.score < 0.9)
-      .slice(0, 15)
-      .map((audit) => ({
-        id: audit.id,
-        title: audit.title,
-        score: audit.score,
-        displayValue: audit.displayValue,
-        description: audit.description,
-      }));
-
-    return {
-      scores: {
-        performance: scoreToPercent(lhr.categories.performance?.score),
-        accessibility: scoreToPercent(lhr.categories.accessibility?.score),
-        bestPractices: scoreToPercent(lhr.categories['best-practices']?.score),
-        seo: scoreToPercent(lhr.categories.seo?.score),
-      },
-      metrics: {
-        largestContentfulPaint: readDisplayValue(audits, 'largest-contentful-paint'),
-        cumulativeLayoutShift: readDisplayValue(audits, 'cumulative-layout-shift'),
-        totalBlockingTime: readDisplayValue(audits, 'total-blocking-time'),
-        speedIndex: readDisplayValue(audits, 'speed-index'),
-      },
-      audits: auditEvidence,
-    };
+    return parseLighthouseReport(runnerResult);
   } finally {
     await chrome.kill();
   }
+}
+
+export async function scanLighthouse(options: LighthouseScanOptions): Promise<LighthouseEvidence> {
+  if (options.authStatePath) {
+    return scanLighthouseWithAuth({ ...options, authStatePath: options.authStatePath });
+  }
+  return scanLighthouseWithoutAuth(options);
 }

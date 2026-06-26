@@ -10,6 +10,7 @@ import type {
   QualityStatus,
   ScanMetricComparisonView,
   ScanResultModel,
+  ScanSetView,
   TargetUrlMismatchReason,
 } from './types';
 
@@ -20,6 +21,7 @@ interface ScanResultViewProps {
   scanDir: string;
   scanJsonPath: string;
   reportMarkdownPath: string;
+  scanSet?: ScanSetView;
 }
 
 type LongTaskView = NonNullable<ScanResultModel['performanceTrace']>['longTasks'][number];
@@ -532,15 +534,27 @@ function AiTab({ result }: { result: ScanResultModel }) {
 function PerformanceTab({ result }: { result: ScanResultModel }) {
   const lighthouse = result.lighthouse;
   const trace = result.performanceTrace;
+  const traceCls = trace?.layoutShifts.reduce((sum, shift) => sum + shift.score, 0);
+  const traceTbtMs = trace?.longTasks.reduce((sum, task) => sum + task.duration, 0);
 
   return (
     <Row gutter={[16, 16]}>
       <Col xs={24} lg={12}>
         <Descriptions title="核心指标" column={1} size="small" bordered>
-          <Descriptions.Item label="LCP">{lighthouse?.metrics.largestContentfulPaint ?? '未采集'}</Descriptions.Item>
-          <Descriptions.Item label="CLS">{lighthouse?.metrics.cumulativeLayoutShift ?? '未采集'}</Descriptions.Item>
-          <Descriptions.Item label="TBT">{lighthouse?.metrics.totalBlockingTime ?? '未采集'}</Descriptions.Item>
-          <Descriptions.Item label="Speed Index">{lighthouse?.metrics.speedIndex ?? '未采集'}</Descriptions.Item>
+          <Descriptions.Item label="LCP">
+            {lighthouse?.metrics.largestContentfulPaint ?? '未采集（登录态页需 Lighthouse 成功运行）'}
+          </Descriptions.Item>
+          <Descriptions.Item label="CLS">
+            {lighthouse?.metrics.cumulativeLayoutShift ??
+              (traceCls != null ? `${traceCls.toFixed(3)}（Trace 近似）` : '未采集')}
+          </Descriptions.Item>
+          <Descriptions.Item label="TBT">
+            {lighthouse?.metrics.totalBlockingTime ??
+              (traceTbtMs != null ? `${traceTbtMs.toFixed(0)} ms（Long Task 合计）` : '未采集')}
+          </Descriptions.Item>
+          <Descriptions.Item label="Speed Index">
+            {lighthouse?.metrics.speedIndex ?? '未采集（仅 Lighthouse 提供）'}
+          </Descriptions.Item>
         </Descriptions>
         {trace && (
           <Descriptions title="主线程耗时 (ms)" column={2} size="small" bordered style={{ marginTop: 16 }}>
@@ -828,7 +842,43 @@ function MemoryTab({ result }: { result: ScanResultModel }) {
   );
 }
 
-export function ScanResultView({ result, scanDir, scanJsonPath, reportMarkdownPath }: ScanResultViewProps) {
+function ScanSetSummary({ scanSet }: { scanSet: ScanSetView }) {
+  return (
+    <Card title="多路由扫描汇总" style={{ marginBottom: 16 }}>
+      <Space direction="vertical" size={12} className="full-width">
+        <Text>
+          共扫描 {scanSet.summary.routeCount} 条路由，失败 {scanSet.summary.failedRoutes} 条
+        </Text>
+        <Table
+          size="small"
+          pagination={false}
+          rowKey="url"
+          dataSource={scanSet.routes}
+          columns={[
+            { title: 'URL', dataIndex: 'url', key: 'url' },
+            { title: '最终 URL', dataIndex: 'finalUrl', key: 'finalUrl', render: (value?: string) => value ?? 'n/a' },
+            {
+              title: '目标命中',
+              dataIndex: 'targetMatched',
+              key: 'targetMatched',
+              render: (value?: boolean) => (value === true ? '是' : value === false ? '否' : 'n/a'),
+            },
+            { title: '运行时错误', dataIndex: 'runtimeErrors', key: 'runtimeErrors' },
+            { title: '失败请求', dataIndex: 'failedRequests', key: 'failedRequests' },
+            {
+              title: 'Performance',
+              dataIndex: 'performanceScore',
+              key: 'performanceScore',
+              render: (value?: number | null) => (typeof value === 'number' ? value : 'n/a'),
+            },
+          ]}
+        />
+      </Space>
+    </Card>
+  );
+}
+
+export function ScanResultView({ result, scanDir, scanJsonPath, reportMarkdownPath, scanSet }: ScanResultViewProps) {
   const aiFailed = Boolean(result.input.enableAi && !result.aiDiagnosis);
   const defaultTab = result.input.enableAi ? 'ai' : 'overview';
 
@@ -863,6 +913,8 @@ export function ScanResultView({ result, scanDir, scanJsonPath, reportMarkdownPa
 
       <LighthouseScoreRow result={result} />
       <ScoreCards result={result} />
+
+      {scanSet && <ScanSetSummary scanSet={scanSet} />}
 
       <Tabs
         className="scan-report-tabs"

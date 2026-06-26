@@ -24,8 +24,8 @@ export interface MemoryCdpSession {
 }
 
 export interface MemoryPage {
-  goto(url: string, options: { waitUntil: 'networkidle'; timeout: number }): Promise<unknown>;
-  reload?(options: { waitUntil: 'networkidle'; timeout: number }): Promise<unknown>;
+  goto(url: string, options: { waitUntil: 'domcontentloaded' | 'networkidle'; timeout: number }): Promise<unknown>;
+  reload?(options: { waitUntil: 'domcontentloaded' | 'networkidle'; timeout: number }): Promise<unknown>;
 }
 
 export interface MemoryPageSession {
@@ -129,7 +129,7 @@ export async function scanMemory(
 
   try {
     await session.cdp.send('HeapProfiler.enable');
-    await session.page.goto(options.url, { waitUntil: 'networkidle', timeout: NAVIGATION_TIMEOUT_MS });
+    await session.page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
 
     const baseline = await captureSnapshot(session.cdp, options.baselinePath);
     if (baseline.stats.detachedNodeCount > 0) {
@@ -142,7 +142,7 @@ export async function scanMemory(
     const reloadRounds = options.reloadRounds ?? 0;
     if (reloadRounds > 0 && options.comparisonPath && session.page.reload) {
       for (let round = 0; round < reloadRounds; round += 1) {
-        await session.page.reload({ waitUntil: 'networkidle', timeout: NAVIGATION_TIMEOUT_MS });
+        await session.page.reload({ waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
       }
       const after = await captureSnapshot(session.cdp, options.comparisonPath);
       comparison = compareSnapshots(baseline, after, reloadRounds);

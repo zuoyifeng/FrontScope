@@ -25,7 +25,18 @@ const mockAiStatusNotReady = {
 
 const mockAuthProfiles = {
   profiles: [
-    { profileName: 'admin', authStatePath: '.frontscope/auth/admin.json' },
+    {
+      profileName: 'admin',
+      authStatePath: '.frontscope/auth/admin.json',
+      metadata: {
+        profileName: 'admin',
+        authStatePath: '.frontscope/auth/admin.json',
+        loginUrl: 'https://example.com/login',
+        targetOrigin: 'https://example.com',
+        createdAt: '2026-06-25T00:00:00.000Z',
+        verification: { status: 'unknown' },
+      },
+    },
     { profileName: 'ops', authStatePath: '.frontscope/auth/ops.json' },
   ],
 };
@@ -35,7 +46,20 @@ function mockFetch(handlers: {
   authProfiles?: typeof mockAuthProfiles;
   onScan?: (body: unknown) => void;
   onCreateProfile?: (body: unknown) => unknown;
+  onStartRecording?: (body: unknown) => void;
+  onCompleteRecording?: (recordingId: string) => void;
+  onCancelRecording?: (recordingId: string) => void;
+  onVerifyProfile?: (profileName: string, body: unknown) => void;
   onAiTest?: (body: unknown) => void;
+  onInspectProject?: (body: unknown) => void;
+  inspectProjectResult?: {
+    projectPath: string;
+    packageManager: string;
+    devScripts: Array<{ name: string; command: string }>;
+    frameworkDetections: Array<{ framework: string; confidence: string }>;
+    routeCandidates: Array<{ path: string; source: string }>;
+    needsUserApproval: string[];
+  };
   onScanProgress?: (progressId: string) => void;
   aiTestResult?: {
     success: boolean;
@@ -84,6 +108,56 @@ function mockFetch(handlers: {
         } as Response;
       }
 
+      if (url.endsWith('/api/auth-profiles/recordings') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        handlers.onStartRecording?.(body);
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: {
+              recordingId: 'recording-1',
+              profileName: body.profileName,
+              loginUrl: body.loginUrl,
+              targetUrl: body.targetUrl,
+              message: '浏览器已打开，请在浏览器中完成登录，然后回到 FrontScope 点击验证并保存。',
+            },
+          }),
+        } as Response;
+      }
+
+      const completeRecordingMatch = url.match(/\/api\/auth-profiles\/recordings\/([^/]+)\/complete$/);
+      if (completeRecordingMatch && init?.method === 'POST') {
+        const recordingId = decodeURIComponent(completeRecordingMatch[1]);
+        handlers.onCompleteRecording?.(recordingId);
+        profileList.push({
+          profileName: 'admin',
+          authStatePath: '.frontscope/auth/admin.json',
+          metadata: {
+            profileName: 'admin',
+            authStatePath: '.frontscope/auth/admin.json',
+            loginUrl: 'https://example.com/login',
+            targetOrigin: 'https://example.com',
+            createdAt: '2026-06-26T00:00:00.000Z',
+            lastVerifiedAt: '2026-06-26T00:01:00.000Z',
+            verification: { status: 'valid', finalUrl: 'https://example.com/admin' },
+          },
+        });
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data: profileList[profileList.length - 1].metadata,
+          }),
+        } as Response;
+      }
+
+      const cancelRecordingMatch = url.match(/\/api\/auth-profiles\/recordings\/([^/]+)\/cancel$/);
+      if (cancelRecordingMatch && init?.method === 'POST') {
+        handlers.onCancelRecording?.(decodeURIComponent(cancelRecordingMatch[1]));
+        return { ok: true, json: async () => ({ success: true }) } as Response;
+      }
+
       if (url.endsWith('/api/auth-profiles') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body));
         handlers.onCreateProfile?.(body);
@@ -102,6 +176,27 @@ function mockFetch(handlers: {
         return {
           ok: true,
           json: async () => createdProfile,
+        } as Response;
+      }
+
+      const verifyMatch = url.match(/\/api\/auth-profiles\/([^/]+)\/verify$/);
+      if (verifyMatch && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        handlers.onVerifyProfile?.(decodeURIComponent(verifyMatch[1]), body);
+        return {
+          ok: true,
+          json: async () => ({
+            profileName: decodeURIComponent(verifyMatch[1]),
+            authStatePath: `.frontscope/auth/${decodeURIComponent(verifyMatch[1])}.json`,
+            loginUrl: 'https://example.com/login',
+            targetOrigin: 'https://example.com',
+            createdAt: '2026-06-25T00:00:00.000Z',
+            lastVerifiedAt: '2026-06-25T00:01:00.000Z',
+            verification: {
+              status: 'valid',
+              finalUrl: body.targetUrl,
+            },
+          }),
         } as Response;
       }
 
@@ -177,6 +272,26 @@ function mockFetch(handlers: {
               durationMs: 128,
               responsePreview: '{"ok":true}',
             },
+        } as Response;
+      }
+
+      if (url.endsWith('/api/local-projects/inspect') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body));
+        handlers.onInspectProject?.(body);
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            data:
+              handlers.inspectProjectResult ?? {
+                projectPath: body.projectPath,
+                packageManager: 'pnpm',
+                devScripts: [{ name: 'dev', command: 'vite' }],
+                frameworkDetections: [{ framework: 'react', confidence: 'high' }],
+                routeCandidates: [{ path: '/dashboard', source: 'next-app' }],
+                needsUserApproval: ['run-script'],
+              },
+          }),
         } as Response;
       }
 
@@ -305,6 +420,31 @@ describe('App', () => {
     expect(screen.getByText('请填写项目路径')).toBeInTheDocument();
   });
 
+  it('local mode inspects project and shows intake summary', async () => {
+    let inspectBody: unknown;
+    mockFetch({
+      aiStatus: mockAiStatusNotReady,
+      onInspectProject: (body) => {
+        inspectBody = body;
+      },
+    });
+    render(<App />);
+    await switchToLocalMode();
+
+    fireEvent.change(screen.getByPlaceholderText('/absolute/path/to/frontend-project'), {
+      target: { value: '/tmp/project' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '检查本地项目' }));
+
+    await waitFor(() => {
+      expect(inspectBody).toEqual({ projectPath: '/tmp/project' });
+    });
+
+    expect(await screen.findByText('本地项目摘要')).toBeInTheDocument();
+    expect(screen.getByText(/包管理器：pnpm/)).toBeInTheDocument();
+    expect(screen.getByText(/路由候选：1 条/)).toBeInTheDocument();
+  });
+
   it('online mode renders auth profile selector', async () => {
     mockFetch({ aiStatus: mockAiStatusNotReady, authProfiles: mockAuthProfiles });
     render(<App />);
@@ -367,13 +507,52 @@ describe('App', () => {
     });
   });
 
-  it('create profile calls POST with profile name, login URL, and target URL', async () => {
-    let createBody: unknown;
+  it('verifies selected auth profile against the current page URL', async () => {
+    let verifiedProfileName = '';
+    let verifyBody: unknown;
+    mockFetch({
+      aiStatus: mockAiStatusNotReady,
+      authProfiles: mockAuthProfiles,
+      onVerifyProfile: (profileName, body) => {
+        verifiedProfileName = profileName;
+        verifyBody = body;
+      },
+    });
+
+    render(<App />);
+
+    fireEvent.change(screen.getByPlaceholderText('http://localhost:5173 或 https://example.com'), {
+      target: { value: 'https://example.com/admin' },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('登录态配置')).toBeInTheDocument();
+    });
+
+    fireEvent.mouseDown(screen.getByText('选择登录态配置（可选）'));
+    fireEvent.click(await screen.findByText('admin'));
+    fireEvent.click(screen.getByRole('button', { name: '验证登录态' }));
+
+    await waitFor(() => {
+      expect(verifiedProfileName).toBe('admin');
+    });
+
+    expect(verifyBody).toEqual({ targetUrl: 'https://example.com/admin' });
+    expect(screen.getByText('登录态有效')).toBeInTheDocument();
+  });
+
+  it('starts visual auth recording and completes it before selecting the profile', async () => {
+    let startBody: unknown;
+    let completedRecordingId = '';
+
     mockFetch({
       aiStatus: mockAiStatusNotReady,
       authProfiles: { profiles: [] },
-      onCreateProfile: (body) => {
-        createBody = body;
+      onStartRecording: (body) => {
+        startBody = body;
+      },
+      onCompleteRecording: (recordingId) => {
+        completedRecordingId = recordingId;
       },
     });
 
@@ -383,41 +562,9 @@ describe('App', () => {
       expect(screen.getByText('新建登录态配置')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('新建登录态配置'));
-    fireEvent.change(screen.getByPlaceholderText('配置名称，例如 admin'), {
-      target: { value: 'staging-admin' },
+    fireEvent.change(screen.getByPlaceholderText('http://localhost:5173 或 https://example.com'), {
+      target: { value: 'https://example.com/admin' },
     });
-    fireEvent.change(screen.getByPlaceholderText('登录页地址，例如 https://example.com/login'), {
-      target: { value: 'https://example.com/login' },
-    });
-    fireEvent.change(screen.getByPlaceholderText('目标页地址（可选，默认使用上方页面地址）'), {
-      target: { value: 'https://example.com/app' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: '生成登录态' }));
-
-    await waitFor(() => {
-      expect(createBody).toBeDefined();
-    });
-
-    expect(createBody).toEqual({
-      profileName: 'staging-admin',
-      loginUrl: 'https://example.com/login',
-      targetUrl: 'https://example.com/app',
-    });
-  });
-
-  it('successful create selects returned auth path', async () => {
-    mockFetch({
-      aiStatus: mockAiStatusNotReady,
-      authProfiles: { profiles: [] },
-    });
-
-    render(<App />);
-
-    await waitFor(() => {
-      expect(screen.getByText('新建登录态配置')).toBeInTheDocument();
-    });
-
     fireEvent.click(screen.getByText('新建登录态配置'));
     fireEvent.change(screen.getByPlaceholderText('配置名称，例如 admin'), {
       target: { value: 'admin' },
@@ -425,23 +572,49 @@ describe('App', () => {
     fireEvent.change(screen.getByPlaceholderText('登录页地址，例如 https://example.com/login'), {
       target: { value: 'https://example.com/login' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '生成登录态' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始登录录制' }));
 
     await waitFor(() => {
-      expect(screen.queryByPlaceholderText('配置名称，例如 admin')).not.toBeInTheDocument();
+      expect(startBody).toEqual({
+        profileName: 'admin',
+        loginUrl: 'https://example.com/login',
+        targetUrl: 'https://example.com/admin',
+      });
     });
 
+    expect(
+      screen.getByText('浏览器已打开，请在浏览器中完成登录，然后回到 FrontScope 点击验证并保存。'),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '我已完成登录，验证并保存' }));
+
     await waitFor(() => {
-      expect(screen.getByText('admin')).toBeInTheDocument();
+      expect(completedRecordingId).toBe('recording-1');
     });
+    expect(screen.getByText('登录态有效')).toBeInTheDocument();
   });
 
-  it('failed create shows error state', async () => {
-    mockFetch({
-      aiStatus: mockAiStatusNotReady,
-      authProfiles: { profiles: [] },
-      createProfileFails: true,
-    });
+  it('failed recording start shows error state', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/api/ai/status')) {
+          return { ok: true, json: async () => mockAiStatusNotReady } as Response;
+        }
+        if (url.endsWith('/api/auth-profiles') && (!init?.method || init.method === 'GET')) {
+          return { ok: true, json: async () => ({ profiles: [] }) } as Response;
+        }
+        if (url.endsWith('/api/auth-profiles/recordings') && init?.method === 'POST') {
+          return {
+            ok: false,
+            status: 400,
+            json: async () => ({ success: false, error: 'profile name is invalid', field: 'profileName' }),
+          } as Response;
+        }
+        throw new Error(`Unexpected fetch: ${url}`);
+      }),
+    );
 
     render(<App />);
 
@@ -449,6 +622,9 @@ describe('App', () => {
       expect(screen.getByText('新建登录态配置')).toBeInTheDocument();
     });
 
+    fireEvent.change(screen.getByPlaceholderText('http://localhost:5173 或 https://example.com'), {
+      target: { value: 'https://example.com/admin' },
+    });
     fireEvent.click(screen.getByText('新建登录态配置'));
     fireEvent.change(screen.getByPlaceholderText('配置名称，例如 admin'), {
       target: { value: '../secret' },
@@ -456,7 +632,7 @@ describe('App', () => {
     fireEvent.change(screen.getByPlaceholderText('登录页地址，例如 https://example.com/login'), {
       target: { value: 'https://example.com/login' },
     });
-    fireEvent.click(screen.getByRole('button', { name: '生成登录态' }));
+    fireEvent.click(screen.getByRole('button', { name: '开始登录录制' }));
 
     await waitFor(() => {
       expect(screen.getByText('profile name is invalid')).toBeInTheDocument();

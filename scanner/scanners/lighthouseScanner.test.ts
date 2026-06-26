@@ -1,6 +1,14 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { resolveChromePath } from './lighthouseScanner.js';
+import { allocateDebugPort, resolveChromePath } from './lighthouseScanner.js';
+
+describe('allocateDebugPort', () => {
+  it('returns a port in the expected debugging range', () => {
+    const port = allocateDebugPort();
+    expect(port).toBeGreaterThanOrEqual(9200);
+    expect(port).toBeLessThan(10000);
+  });
+});
 
 describe('resolveChromePath', () => {
   it('prefers an existing Playwright executable path over fallback paths', () => {

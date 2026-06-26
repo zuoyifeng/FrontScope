@@ -19,7 +19,7 @@ import type {
 
 export interface PageSessionPage {
   on(eventName: string, handler: (payload: unknown) => void): void;
-  goto(url: string, options: { waitUntil: 'networkidle'; timeout: number }): Promise<unknown>;
+  goto(url: string, options: { waitUntil: 'domcontentloaded' | 'networkidle'; timeout: number }): Promise<unknown>;
   screenshot(options: { path: string; fullPage: boolean }): Promise<unknown>;
   title(): Promise<string>;
   url(): string;
@@ -141,20 +141,34 @@ function toModuleError(module: ScanModuleKey, error: unknown): ScanModuleError {
   return { module, message: String(error) };
 }
 
-function waitForTracingComplete(cdp: PageSessionCdp): Promise<string> {
+function waitForTracingCompleteEvent(cdp: PageSessionCdp): Promise<string> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      reject(new Error('Tracing did not complete within timeout'));
-    }, TRACE_TIMEOUT_MS);
-
-    cdp.on('Tracing.tracingComplete', (params) => {
-      clearTimeout(timeout);
+    const handler = (params: unknown) => {
+      cdp.off?.('Tracing.tracingComplete', handler);
       if (!isRecord(params) || typeof params.stream !== 'string') {
         reject(new Error('Tracing completed without stream handle'));
         return;
       }
       resolve(params.stream);
-    });
+    };
+
+    cdp.on('Tracing.tracingComplete', handler);
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
   });
 }
 
@@ -272,22 +286,23 @@ export async function collectPageEvidence(
       result.errors.push(toModuleError('network', error));
     }
 
-    let tracingComplete: Promise<string> | undefined;
+    let tracingStarted = false;
     try {
       await session.cdp.send('Tracing.start', {
         categories: TRACE_CATEGORIES.join(','),
         transferMode: 'ReturnAsStream',
       });
-      tracingComplete = waitForTracingComplete(session.cdp);
+      tracingStarted = true;
     } catch (error) {
       result.errors.push(toModuleError('performance-trace', error));
     }
 
     // Single page load shared by all three evidence modules. A navigation
-    // failure (e.g. networkidle timeout) is swallowed so collected evidence is
-    // still finalized below.
+    // failure (e.g. timeout) is swallowed so collected evidence is still
+    // finalized below. Use domcontentloaded — dashboard/polling pages never
+    // reach networkidle.
     try {
-      await session.page.goto(options.url, { waitUntil: 'networkidle', timeout: NAVIGATION_TIMEOUT_MS });
+      await session.page.goto(options.url, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
     } catch {
       // Intentionally ignored: finalize whatever evidence was captured.
     }
@@ -312,10 +327,15 @@ export async function collectPageEvidence(
       result.errors.push(toModuleError('runtime', error));
     }
 
-    if (tracingComplete) {
+    if (tracingStarted) {
       try {
+        const streamPromise = waitForTracingCompleteEvent(session.cdp);
         await session.cdp.send('Tracing.end');
-        const streamHandle = await tracingComplete;
+        const streamHandle = await withTimeout(
+          streamPromise,
+          TRACE_TIMEOUT_MS,
+          'Tracing did not complete within timeout',
+        );
         const traceText = await readTraceStream(session.cdp, streamHandle);
         writeFileSync(options.tracePath, traceText, 'utf8');
         result.performanceTrace = parseTrace(JSON.parse(traceText), options.tracePath);
