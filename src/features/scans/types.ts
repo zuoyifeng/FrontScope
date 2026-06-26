@@ -225,6 +225,33 @@ export interface ScanModuleErrorView {
 
 export type ScanMode = 'local' | 'online';
 
+export interface LocalProjectIntakeView {
+  projectPath: string;
+  packageManager: string;
+  devScripts: Array<{ name: string; command: string }>;
+  frameworkDetections: Array<{ framework: string; confidence: string }>;
+  routeCandidates: Array<{ path: string; source: string }>;
+  needsUserApproval: string[];
+}
+
+export interface ScanSetRouteView {
+  url: string;
+  finalUrl?: string;
+  targetMatched?: boolean;
+  runtimeErrors: number;
+  failedRequests: number;
+  performanceScore?: number | null;
+  hasErrors: boolean;
+}
+
+export interface ScanSetView {
+  routes: ScanSetRouteView[];
+  summary: {
+    routeCount: number;
+    failedRoutes: number;
+  };
+}
+
 export interface ScanResultModel {
   id: string;
   createdAt: string;

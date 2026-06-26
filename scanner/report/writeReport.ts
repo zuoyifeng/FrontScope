@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TARGET_MISMATCH_LABELS } from '../scanners/runtimeScanner.js';
 import type { ScanMetricComparison, ScanResult } from '../types.js';
+import type { ScanSetResult } from '../scan/scanSet.js';
 
 export interface WriteReportResult {
   scanDir: string;
@@ -34,6 +35,54 @@ function qualityStatusLabel(status: string, skippedReason?: string): string {
   if (status === 'issues') return '发现问题';
   if (status === 'skipped') return `跳过${skippedReason ? `（${skippedReason}）` : ''}`;
   return `异常${skippedReason ? `（${skippedReason}）` : ''}`;
+}
+
+function createRouteDiscoverySection(result: ScanResult): string {
+  const discovery = result.routeDiscovery;
+  if (!discovery) return '';
+
+  const candidateLines =
+    discovery.candidates.length > 0
+      ? discovery.candidates
+          .map(
+            (candidate) =>
+              `  - ${candidate.path} (${candidate.source}${candidate.file ? `, ${candidate.file}` : ''})`,
+          )
+          .join('\n')
+      : '  - 无';
+
+  return `## Route Discovery
+
+- Status: ${discovery.status}
+${discovery.skippedReason ? `- Skipped reason: ${discovery.skippedReason}\n` : ''}- Candidates:
+${candidateLines}
+
+`;
+}
+
+export function createScanSetMarkdownSection(scanSet: ScanSetResult): string {
+  const rows = scanSet.routes
+    .map((route) => {
+      const runtime = route.result.runtime;
+      const runtimeErrors = (runtime?.consoleErrors.length ?? 0) + (runtime?.pageErrors.length ?? 0);
+      const failedRequests = (runtime?.requestFailures.length ?? 0) + (runtime?.httpErrors.length ?? 0);
+      const performanceScore = route.result.lighthouse?.scores.performance;
+      return `| ${route.url} | ${runtime?.finalUrl ?? 'n/a'} | ${
+        runtime?.targetUrlMatched === false ? '否' : runtime?.targetUrlMatched === true ? '是' : 'n/a'
+      } | ${runtimeErrors} | ${failedRequests} | ${typeof performanceScore === 'number' ? performanceScore : 'n/a'} |`;
+    })
+    .join('\n');
+
+  return `## Scan Set Summary
+
+- Routes scanned: ${scanSet.summary.routeCount}
+- Failed routes: ${scanSet.summary.failedRoutes}
+
+| URL | Final URL | Target matched | Runtime errors | Failed requests | Lighthouse performance |
+| --- | --- | --- | --- | --- | --- |
+${rows || '| - | - | - | - | - | - |'}
+
+`;
 }
 
 function createProjectQualitySection(result: ScanResult): string {
@@ -375,7 +424,7 @@ ${largeResources}
 | --- | --- | --- | --- | --- |
 ${failedNetworkRows}
 
-## 项目信息
+${createRouteDiscoverySection(result)}## 项目信息
 
 ${result.projectEvidenceEnabled ? `- 包管理器: ${result.package?.packageManager ?? '未采集'}
 - 框架特征: ${result.package?.frameworkHints.join(', ') || '未识别'}

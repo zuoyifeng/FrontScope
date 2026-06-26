@@ -1,7 +1,10 @@
 // @vitest-environment node
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import app from './api.js';
-import { runScan } from '../scanner/scan/runScan.js';
+import { runScan, type RunScanResult } from '../scanner/scan/runScan.js';
 import { runAiConnectionTest } from '../scanner/ai/testAiConnection.js';
 import { clearScanProgressStore, getScanProgress } from './scanProgressStore.js';
 
@@ -13,9 +16,17 @@ vi.mock('../scanner/ai/testAiConnection.js', () => ({
   runAiConnectionTest: vi.fn(),
 }));
 
-const mockRunScanResult = {
+const mockRunScanResult: RunScanResult = {
   result: {
     id: 'scan-1',
+    createdAt: '2026-06-25T00:00:00.000Z',
+    scanMode: 'online',
+    projectEvidenceEnabled: false,
+    input: {
+      scanMode: 'online',
+      url: 'http://localhost:5173',
+      viewport: 'desktop',
+    },
     errors: [],
     aiDiagnosis: {
       summary: 'AI summary',
@@ -89,6 +100,16 @@ describe('scan API', () => {
       });
       expect(unauthorized.status).toBe(401);
 
+      const unauthorizedProgress = await securedApp.request('/api/scan/progress/missing');
+      expect(unauthorizedProgress.status).toBe(401);
+
+      const unauthorizedAiTest = await securedApp.request('/api/ai/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      expect(unauthorizedAiTest.status).toBe(401);
+
       const authorized = await securedApp.request('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer secret-token' },
@@ -129,5 +150,32 @@ describe('AI test API', () => {
       responsePreview: '{"ok":true}',
     });
     expect(runAiConnectionTest).toHaveBeenCalledWith({ projectPath: '/tmp/project' });
+  });
+});
+
+describe('local project inspect API', () => {
+  it('returns package manager and dev scripts for a temp project', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'frontscope-api-intake-'));
+    writeFileSync(join(root, 'pnpm-lock.yaml'), '');
+    writeFileSync(
+      join(root, 'package.json'),
+      JSON.stringify({
+        scripts: { dev: 'vite --host 127.0.0.1' },
+        dependencies: { react: '^19.0.0' },
+      }),
+      'utf8',
+    );
+
+    const response = await app.request('/api/local-projects/inspect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectPath: root }),
+    });
+
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.success).toBe(true);
+    expect(json.data.packageManager).toBe('pnpm');
+    expect(json.data.devScripts).toEqual([{ name: 'dev', command: 'vite --host 127.0.0.1' }]);
   });
 });

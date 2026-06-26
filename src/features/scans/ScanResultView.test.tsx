@@ -190,4 +190,43 @@ describe('ScanResultView', () => {
     fireEvent.click(screen.getByRole('tab', { name: '项目质量' }));
     expect(screen.getByText('本地项目证据已跳过')).toBeInTheDocument();
   });
+
+  it('renders scan set summary when provided', () => {
+    render(
+      <ScanResultView
+        result={createResult()}
+        scanDir="/tmp/scan-dir"
+        scanJsonPath="/tmp/scan.json"
+        reportMarkdownPath="/tmp/report.md"
+        scanSet={{
+          summary: { routeCount: 2, failedRoutes: 1 },
+          routes: [
+            {
+              url: 'http://localhost:5173/dashboard',
+              finalUrl: 'http://localhost:5173/dashboard',
+              targetMatched: true,
+              runtimeErrors: 0,
+              failedRequests: 0,
+              performanceScore: 88,
+              hasErrors: false,
+            },
+            {
+              url: 'http://localhost:5173/settings',
+              finalUrl: 'http://localhost:5173/login',
+              targetMatched: false,
+              runtimeErrors: 2,
+              failedRequests: 1,
+              performanceScore: null,
+              hasErrors: true,
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('多路由扫描汇总')).toBeInTheDocument();
+    expect(screen.getAllByText('http://localhost:5173/dashboard').length).toBeGreaterThan(0);
+    expect(screen.getByText('http://localhost:5173/settings')).toBeInTheDocument();
+    expect(screen.getByText(/共扫描 2 条路由，失败 1 条/)).toBeInTheDocument();
+  });
 });

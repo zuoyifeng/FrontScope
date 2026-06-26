@@ -3,8 +3,9 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { writeReport } from './writeReport.js';
+import { writeReport, createScanSetMarkdownSection } from './writeReport.js';
 import type { ScanResult } from '../types.js';
+import type { ScanSetResult } from '../scan/scanSet.js';
 
 function createScanResult(overrides: Partial<ScanResult> = {}): ScanResult {
   return {
@@ -71,5 +72,66 @@ describe('writeReport', () => {
 
     expect(markdown).not.toContain('## ⚠️ 目标页面未命中');
     expect(markdown).toContain('目标命中: 是');
+  });
+
+  it('renders route discovery candidates when present', () => {
+    const outputDir = mkdtempSync(join(tmpdir(), 'frontscope-report-routes-'));
+    const result = createScanResult({
+      scanMode: 'local',
+      projectEvidenceEnabled: true,
+      routeDiscovery: {
+        status: 'ok',
+        candidates: [
+          {
+            path: '/dashboard',
+            source: 'next-app',
+            confidence: 'high',
+            file: 'app/dashboard/page.tsx',
+            reason: 'Next.js App Router page file',
+          },
+        ],
+      },
+    });
+
+    const paths = writeReport(result, outputDir);
+    const markdown = readFileSync(paths.reportMarkdownPath, 'utf8');
+
+    expect(markdown).toContain('## Route Discovery');
+    expect(markdown).toContain('- Status: ok');
+    expect(markdown).toContain('/dashboard (next-app, app/dashboard/page.tsx)');
+  });
+
+  it('renders scan set summary table', () => {
+    const scanSet: ScanSetResult = {
+      routes: [
+        {
+          url: 'http://localhost:5173/dashboard',
+          result: createScanResult({
+            runtime: {
+              requestedUrl: 'http://localhost:5173/dashboard',
+              finalUrl: 'http://localhost:5173/dashboard',
+              title: 'Dashboard',
+              screenshotPath: '/tmp/screenshot.png',
+              targetUrlMatched: true,
+              consoleErrors: [{ type: 'error', text: 'boom' }],
+              pageErrors: [],
+              requestFailures: [],
+              httpErrors: [{ url: 'http://localhost:5173/api', status: 500, statusText: 'Error', method: 'GET' }],
+            },
+            lighthouse: {
+              scores: { performance: 88, accessibility: 90, bestPractices: 90, seo: 90 },
+              metrics: {},
+              audits: [],
+            },
+          }),
+        },
+      ],
+      summary: { routeCount: 1, failedRoutes: 0 },
+    };
+
+    const markdown = createScanSetMarkdownSection(scanSet);
+    expect(markdown).toContain('## Scan Set Summary');
+    expect(markdown).toContain('http://localhost:5173/dashboard');
+    expect(markdown).toContain('| 1 | 1 | 88 |');
   });
 });
