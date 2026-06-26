@@ -1,5 +1,16 @@
 # FrontScope
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/Version-0.1.0-green.svg)](package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6.svg)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-18-61dafb.svg)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-6-646cff.svg)](https://vitejs.dev/)
+[![Playwright](https://img.shields.io/badge/Playwright-e66a00.svg)](https://playwright.dev/)
+[![Lighthouse](https://img.shields.io/badge/Lighthouse-12-f44b21.svg)](https://developer.chrome.com/docs/lighthouse/)
+[![AI Powered](https://img.shields.io/badge/AI-Powered-ff69b4.svg)](#ai-配置)
+
+🏥 **FrontScope** - AI 驱动的前端项目健康检查工具 | 本地优先 | 支持登录态页面 | 多框架兼容 | 智能诊断报告
+
 FrontScope 是一个本地优先的前端项目 AI 体检工具。它面向前端工程师和团队维护者，把页面运行证据、项目质量证据和 AI 诊断组织成可复查的健康报告。
 
 > Project status: early-stage open source. Core scanning/reporting is usable, but authenticated route coverage, cross-framework static analysis, and zero-config local project execution are still on the roadmap.

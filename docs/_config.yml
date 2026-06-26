@@ -1,0 +1,30 @@
+theme: jekyll-theme-minimal
+
+title: FrontScope
+description: AI-Powered Frontend Health Checker
+baseurl: /FrontScope
+url: https://zuoyifeng.github.io
+
+# Navigation
+navigation:
+  - title: Home
+    url: /
+  - title: GitHub
+    url: https://github.com/zuoyifeng/FrontScope
+
+# Social
+github_username: zuoyifeng
+
+# Build
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+
+# Exclude
+exclude:
+  - node_modules
+  - vendor
+  - Gemfile
+  - Gemfile.lock
+  - README.md
